@@ -149,3 +149,20 @@ describe('monitoring configs', () => {
     }
   });
 });
+
+describe('child process environment', () => {
+  it('strips variables pm2 injects so child pm2 calls keep their own --name', async () => {
+    const { childEnv } = await import('../src/server/lib/exec.js');
+    const saved = { ...process.env };
+    Object.assign(process.env, { pm_id: '1', name: 'homeport', homeport: '{}', namespace: 'default', NODE_CHANNEL_FD: '3', PM2_HOME: '/x/.pm2', PM2_USAGE: 'CLI', KEEP_ME: 'yes' });
+    try {
+      const env = childEnv();
+      for (const k of ['pm_id', 'name', 'homeport', 'namespace', 'NODE_CHANNEL_FD', 'PM2_USAGE']) expect(env[k]).toBeUndefined();
+      expect(env.PM2_HOME).toBe('/x/.pm2');
+      expect(env.KEEP_ME).toBe('yes');
+    } finally {
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+    }
+  });
+});

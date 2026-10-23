@@ -20,12 +20,30 @@ export interface RunOptions {
 }
 
 /** Variables that belong to Homeport itself and must not leak into managed processes. */
-const PRIVATE_ENV = ['PORT', 'HOST', 'TM_PASSWORD', 'TM_DATA_DIR', 'NODE_APP_INSTANCE', 'unique_id'];
+const PRIVATE_ENV = ['PORT', 'HOST', 'TM_PASSWORD', 'TM_DATA_DIR'];
+
+/**
+ * When Homeport itself runs under pm2, pm2 injects its process metadata as environment variables.
+ * They must never reach child processes: some pm2 versions read `name` from the environment, so
+ * `pm2 start caddy --name hp-caddy` would silently create a process called "homeport", and
+ * NODE_CHANNEL_FD would make child Node processes think they have an IPC channel.
+ */
+const PM2_INJECTED = new Set([
+  'name', 'namespace', 'status', 'instances', 'exec_mode', 'exec_interpreter', 'autorestart', 'autostart', 'automation',
+  'treekill', 'vizion', 'vizion_running', 'km_link', 'merge_logs', 'instance_var', 'kill_retry_time', 'windowsHide',
+  'username', 'unique_id', 'created_at', 'restart_time', 'unstable_restarts', 'pmx',
+  'NODE_APP_INSTANCE', 'NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE',
+  'PM2_USAGE', 'PM2_JSON_PROCESSING', 'PM2_INTERACTOR_PROCESSING', 'PM2_PROGRAMMATIC',
+]);
 
 export function childEnv(extra: Record<string, string | undefined> = {}, opts: { keepNodeEnv?: boolean } = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
+  const ownName = process.env.pm_id !== undefined ? process.env.name : undefined;
   for (const k of PRIVATE_ENV) delete env[k];
-  for (const k of Object.keys(env)) if (k.startsWith('pm_') || k.startsWith('PM2_')) delete env[k];
+  for (const k of Object.keys(env)) {
+    // PM2_HOME is kept on purpose: it tells the pm2 CLI which daemon to talk to.
+    if (PM2_INJECTED.has(k) || k.startsWith('pm_') || k === ownName) delete env[k];
+  }
   if (opts.keepNodeEnv === false) delete env.NODE_ENV;
   env.GIT_TERMINAL_PROMPT = '0';
   env.GIT_SSH_COMMAND ??= 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new';
