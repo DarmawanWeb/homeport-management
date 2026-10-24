@@ -1,5 +1,4 @@
-import { type FormEvent, useState } from 'react';
-import { BrandMark } from '../components/Shell';
+import { useState } from 'react';
 import { Badge, Button, Empty, Loading, PageHead, Panel, Segmented } from '../components/ui';
 import { post } from '../lib/api';
 import { useCaddyfile, useLogs, useRefresh } from '../lib/queries';
@@ -104,40 +103,6 @@ export function Activity() {
           <Empty title={filter === 'all' ? 'Nothing has happened yet' : 'No warnings or errors'} />
         )}
       </Panel>
-    </div>
-  );
-}
-
-export function Login({ onDone }: { onDone: () => void }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await post('/api/login', { password: pw });
-      onDone();
-    } catch (x) {
-      setErr((x as Error).message);
-    }
-  };
-  return (
-    <div className="login">
-      <form className="panel" onSubmit={submit}>
-        <div className="panel-body form">
-          <div className="brand" style={{ padding: 0 }}>
-            <BrandMark />
-            <span className="brand-name">Homeport</span>
-          </div>
-          <label className="field">
-            <span>Password</span>
-            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />
-          </label>
-          {err && <p style={{ color: 'var(--port)', fontSize: 'var(--t-sm)' }}>{err}</p>}
-          <button className="btn primary" type="submit">
-            Sign in
-          </button>
-        </div>
-      </form>
     </div>
   );
 }

@@ -10,3 +10,4 @@ Short records of the choices that shaped Homeport, the alternatives considered, 
 | 4 | [Generate config, validate, then swap](/decisions/0004-generated-config) | No hand-edited config, and a typo can never reach the running proxy |
 | 5 | [A JSON file as the database](/decisions/0005-json-store) | Tens of records, one writer, human-readable backups |
 | 6 | [Dashboards and diagrams as code](/decisions/0006-as-code) | Generated from the same source as the metrics, so they cannot drift |
+| 7 | [Public dashboard, local-first trust](/decisions/0007-public-dashboard) | Reachable like a hosted platform, but only the Mac itself can set it up or recover it |

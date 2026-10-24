@@ -6,11 +6,37 @@ The dashboard is a client of this API; everything it does can be scripted. The A
 
 - JSON in, JSON out. Errors are `{ "error": "message" }` with a 4xx or 5xx status.
 - Every request other than `GET` must send `X-Homeport: 1` (CSRF protection).
-- With `TM_PASSWORD` set, `POST /api/login` first and send the `hp_session` cookie.
+- Once a password is set, every endpoint except the three open auth endpoints needs the `hp_session` cookie from `POST /api/auth/login`. Before that, only requests made on the Mac itself are served.
 - Mutations of domains and apps return `steps`, `warning` and `apply` describing side effects such as DNS changes and Caddy reloads.
 
 ```bash
 curl -s -X POST localhost:7070/api/apps/<id>/deploy -H 'X-Homeport: 1'
+```
+
+## Authentication
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/auth/status` | `passwordSet`, `authenticated`, `local`, `totpEnabled`, `publicUrls` (open) |
+| POST | `/api/auth/setup` | `{ password }`: first password; only on the Mac (open) |
+| POST | `/api/auth/login` | `{ password, code? }`; answers `401 { totpRequired: true }` when a code is needed (open) |
+| POST | `/api/auth/logout` | End this session |
+| POST | `/api/auth/password` | `{ current, next }`; signs out every other session |
+| POST | `/api/auth/totp/begin` | New secret, `otpauth://` URI and QR code SVG |
+| POST | `/api/auth/totp/enable` | `{ code }`; returns eight recovery codes |
+| POST | `/api/auth/totp/disable` | `{ password }` |
+| POST | `/api/auth/totp/recovery` | `{ password }`; new recovery codes |
+| GET | `/api/auth/sessions` | Signed-in devices |
+| DELETE | `/api/auth/sessions/:id` | Sign one out |
+| POST | `/api/auth/sessions/revoke-others` | Sign out everything but this session |
+| GET / POST | `/api/auth/public` | List, or `{ hostname, tunnel? }` to publish the dashboard |
+| DELETE | `/api/auth/public/:id?dns=1` | Unpublish |
+
+```bash
+# script against the API from the Mac
+curl -s -c jar -X POST localhost:7070/api/auth/login -H 'X-Homeport: 1' -H 'Content-Type: application/json' \
+  -d '{"password":"…","code":"123456"}'
+curl -s -b jar localhost:7070/api/apps
 ```
 
 ## Apps and deploys

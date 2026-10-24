@@ -2,6 +2,7 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly data: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -14,8 +15,10 @@ export async function api<T = unknown>(method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
   const json = (await res.json().catch(() => ({}))) as { error?: string };
-  if (res.status === 401 && url !== '/api/login') window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-  if (!res.ok) throw new ApiError(res.status, json.error ?? res.statusText);
+  // A lost session (401) or a dashboard that now needs a password (403 from a remote browser) sends the
+  // app back to the sign-in gate. Auth endpoints report their own errors.
+  if ((res.status === 401 || res.status === 403) && !url.startsWith('/api/auth/')) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  if (!res.ok) throw new ApiError(res.status, json.error ?? res.statusText, json as Record<string, unknown>);
   return json as T;
 }
 

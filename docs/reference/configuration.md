@@ -6,12 +6,14 @@ Set in `ecosystem.config.cjs` for the `homeport` pm2 process.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Dashboard bind address. Anything else requires `TM_PASSWORD`. |
+| `HOST` | `127.0.0.1` | Dashboard bind address. Keep it; publish through a tunnel instead |
 | `PORT` | `7070` | Dashboard and API port |
-| `TM_PASSWORD` | unset | Require a password for the dashboard |
+| `TM_PASSWORD` | unset | Deprecated. If set and no password exists yet, it is imported once as the dashboard password |
 | `TM_DATA_DIR` | `./data` | Where state and generated files live |
 
-Everything else is in **Settings** and stored in `data/db.json`.
+Everything else is in **Settings** and stored in `data/db.json`. The password, two-factor secret and sessions live in `data/auth.json` (mode 600), which is never included in exports.
+
+`npm run reset-password` clears `auth.json` and restarts Homeport.
 
 ## Ports
 

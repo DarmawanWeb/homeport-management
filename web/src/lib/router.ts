@@ -11,11 +11,12 @@ export type Route =
   | { page: 'monitoring' }
   | { page: 'caddyfile' }
   | { page: 'activity' }
-  | { page: 'settings' };
+  | { page: 'settings' }
+  | { page: 'access' };
 
 export type AppTab = 'deploys' | 'logs' | 'metrics' | 'settings' | 'webhook';
 const APP_TABS: AppTab[] = ['deploys', 'logs', 'metrics', 'settings', 'webhook'];
-const SIMPLE = ['overview', 'apps', 'domains', 'tunnels', 'services', 'monitoring', 'caddyfile', 'activity', 'settings'] as const;
+const SIMPLE = ['overview', 'apps', 'domains', 'tunnels', 'services', 'monitoring', 'caddyfile', 'activity', 'settings', 'access'] as const;
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);

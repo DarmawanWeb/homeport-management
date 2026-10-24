@@ -2,10 +2,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActivityEntry,
   AppsDTO,
+  AuthStatusDTO,
   Deploy,
   MonitoringStatus,
   Pm2Proc,
+  PublicAccessDTO,
   QueryRangeDTO,
+  SessionView,
   StateDTO,
   StatusDTO,
   SystemDTO,
@@ -91,3 +94,8 @@ export function useRefresh() {
       ),
     );
 }
+
+export const useAuth = () =>
+  useQuery({ queryKey: ['auth'], queryFn: () => get<AuthStatusDTO>('/api/auth/status'), retry: 2, staleTime: 30_000 });
+export const useSessions = () => useQuery({ queryKey: ['auth', 'sessions'], queryFn: () => get<SessionView[]>('/api/auth/sessions') });
+export const usePublicAccess = () => useQuery({ queryKey: ['auth', 'public'], queryFn: () => get<PublicAccessDTO>('/api/auth/public') });

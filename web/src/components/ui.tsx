@@ -304,8 +304,8 @@ export function Modal({
               </button>
             </>
           ) : (
-            <button type="submit" className="btn">
-              Close
+            <button type="submit" className={`btn${submitLabel ? ' primary' : ''}`}>
+              {submitLabel ?? 'Close'}
             </button>
           ))}
       </div>

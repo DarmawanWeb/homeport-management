@@ -9,9 +9,8 @@ module.exports = {
       time: true,
       env: {
         NODE_ENV: 'production',
-        HOST: '127.0.0.1', // dashboard reachable only from this machine
+        HOST: '127.0.0.1', // keep local; publish it through a tunnel from the Access page instead
         PORT: 7070,
-        // TM_PASSWORD: 'change-me', // required if HOST is anything other than localhost
       },
     },
   ],

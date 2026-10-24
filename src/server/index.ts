@@ -1,4 +1,6 @@
 import { buildApp } from './app.js';
+import { adoptEnvPassword } from './auth/index.js';
+import { loadAuth, passwordSet } from './auth/store.js';
 import { DATA_DIR, env, extendPath } from './config.js';
 import { activity } from './lib/activity.js';
 import { errMsg } from './lib/errors.js';
@@ -17,6 +19,8 @@ async function main(): Promise<void> {
   extendPath();
   loadDb();
   await saveDb();
+  if (loadAuth().reset) activity.warn('Dashboard password and sessions were reset. Set a new password on this machine.');
+  await adoptEnvPassword();
   markInterrupted();
 
   registerDeployNotifications();
@@ -31,12 +35,8 @@ async function main(): Promise<void> {
 
   const app = await buildApp();
   await app.listen({ host: env.host, port: env.port });
-  console.log(
-    `\n  Homeport is running at http://${env.host}:${env.port}\n  Data: ${DATA_DIR}${env.password ? '  (password required)' : ''}\n`,
-  );
-  if (!['127.0.0.1', 'localhost', '::1'].includes(env.host) && !env.password) {
-    console.warn('  ⚠  The dashboard is reachable from the network without a password. Set TM_PASSWORD.\n');
-  }
+  console.log(`\n  Homeport is running at http://${env.host}:${env.port}\n  Data: ${DATA_DIR}\n`);
+  if (!passwordSet()) console.log('  Open the address above on this machine to set a dashboard password.\n');
 
   const shutdown = async () => {
     await app.close();

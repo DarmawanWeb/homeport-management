@@ -8,11 +8,11 @@ Homeport runs build scripts from repositories you add, as your user, on a machin
 |---|---|---|
 | Your apps | 127.0.0.1:30xx | Yes, through Caddy, only for hostnames you added |
 | Webhook receiver | 127.0.0.1:9000 | Yes, only `POST /hooks/<app-id>` via the webhook hostname |
-| Dashboard and API | 127.0.0.1:7070 | No |
+| Dashboard and API | 127.0.0.1:7070 | Only if you publish it, and only after a password is set |
 | Prometheus, Grafana, exporters | 127.0.0.1 | No |
 | Caddy admin API | localhost:2019 | No |
 
-Nothing binds to a public interface and no router ports are opened. Never add a domain that points at 7070, 9090, 3300 or 2019.
+Nothing binds to a public interface and no router ports are opened. Never add a domain that points at 9090, 3300 or 2019. The dashboard (7070) can be published from the Access page; Homeport refuses to route a domain to it until a password exists. See [Public dashboard](/guide/public-dashboard).
 
 ## Webhooks
 
@@ -24,9 +24,11 @@ Nothing binds to a public interface and no router ports are opened. Never add a 
 
 ## Dashboard API
 
-- Bound to 127.0.0.1 by default.
-- Every state-changing request must carry `X-Homeport: 1`. Browsers cannot add custom headers to cross-site requests without a CORS preflight, which the server never approves, so another tab cannot drive the API (CSRF).
-- Optional password (`TM_PASSWORD`) with an HttpOnly, SameSite=Strict session cookie and a constant-time comparison. Required if you bind to anything other than localhost.
+- Bound to 127.0.0.1. Remote access goes through the tunnel and Caddy, never a public bind.
+- Until a password is set, only a direct loopback request with a loopback `Host` header and no proxy headers is served. That rules out the tunnel, Caddy, the LAN and DNS rebinding.
+- After that, every API call needs a session: scrypt-hashed password, optional TOTP two-factor with recovery codes, hashed session tokens in HttpOnly, SameSite=Strict, Secure cookies, and per-address plus global lockouts. Details in [Public dashboard](/guide/public-dashboard#what-protects-it).
+- Every state-changing request must carry `X-Homeport: 1` and, when the browser sends one, an `Origin` matching the host. Browsers cannot add custom headers cross-site without a CORS preflight, which the server never approves (CSRF).
+- Responses carry a strict Content-Security-Policy (no inline scripts), `X-Frame-Options: DENY` and HSTS over HTTPS.
 - Every input is validated with Zod; hostnames, branch names, process names and ports have strict patterns.
 
 ## Commands and secrets

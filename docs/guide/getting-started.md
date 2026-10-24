@@ -48,6 +48,8 @@ The dashboard only listens on `127.0.0.1:7070`. On the Mac itself, open <http://
 ssh -N -L 17070:127.0.0.1:7070 you@mac-mini.local
 ```
 
+The first visit asks you to **set a dashboard password**. This only works on the Mac or through an SSH forward like the one above, never through a public hostname. Later you can [publish the dashboard](/guide/public-dashboard) on a domain of your own and open it from anywhere.
+
 ## First run
 
 The dashboard shows what is missing at the top of each page. In order:

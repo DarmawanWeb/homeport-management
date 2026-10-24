@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { Site } from '../../shared/types.js';
+import { passwordSet } from '../auth/store.js';
+import { env } from '../config.js';
 import { activity } from '../lib/activity.js';
 import { badRequest, errMsg, notFound, parse } from '../lib/errors.js';
 import { events } from '../lib/events.js';
@@ -109,10 +111,18 @@ async function sideEffects(out: MutationResult, fn: () => Promise<void>): Promis
   return out;
 }
 
+/** Refuse to put the dashboard itself on a domain until it has a password. */
+export function assertCanExposeDashboard(upstreamHost: string, upstreamPort: number): void {
+  if (upstreamPort === env.port && /^(localhost|127\.0\.0\.1|::1)$/.test(upstreamHost) && !passwordSet()) {
+    throw badRequest('Set a dashboard password before giving the dashboard a public domain');
+  }
+}
+
 export async function createSite(body: unknown): Promise<MutationResult & { site: Site }> {
   const input = parse(siteInput, body);
   const opts = parse(siteOptions, body);
   assertUniqueHost(input.hostname);
+  assertCanExposeDashboard(input.upstreamHost, input.upstreamPort);
   const site: Site = { ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
   await mutateSites(() => db.sites.push(site));
   activity.info(`Domain added: ${site.hostname} → ${site.upstreamHost}:${site.upstreamPort}`);
@@ -131,6 +141,7 @@ export async function updateSite(id: string, body: Record<string, unknown>): Pro
   const next = parse(siteInput, { ...cur, ...body });
   const opts = parse(siteOptions, body);
   assertUniqueHost(next.hostname, id);
+  assertCanExposeDashboard(next.upstreamHost, next.upstreamPort);
   const old = { hostname: cur.hostname, tunnel: cur.tunnel };
   await mutateSites(() => Object.assign(cur, next, { updatedAt: new Date().toISOString() }));
   activity.info(`Domain updated: ${cur.hostname}`);

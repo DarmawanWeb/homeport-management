@@ -5,18 +5,20 @@ import {
   Compass,
   FileCode2,
   Globe,
+  LogOut,
   Menu,
   Moon,
   ScrollText,
   Search,
   Server,
   Settings2,
+  ShieldCheck,
   Sun,
   TriangleAlert,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { post } from '../lib/api';
-import { useApps, useMonitoring, useStatus, useSystem, useTunnels } from '../lib/queries';
+import { useApps, useAuth, useMonitoring, useStatus, useSystem, useTunnels } from '../lib/queries';
 import { href, type Route } from '../lib/router';
 import { useToast } from '../lib/toast';
 import { Button, Light, Notice } from './ui';
@@ -49,12 +51,16 @@ interface NavItem {
   icon: ReactNode;
   count?: number;
   alert?: number;
+  warn?: boolean;
 }
 
 function useNav(): { group: string; items: NavItem[] }[] {
   const { data: apps } = useApps();
   const { data: mon } = useMonitoring();
+  const { data: auth } = useAuth();
   const firing = mon?.alerts.filter((a) => a.state === 'firing').length ?? 0;
+  // Public with no second factor: worth a dot in the sidebar.
+  const access = auth && auth.publicUrls.length > 0 && !auth.totpEnabled;
   return [
     {
       group: 'Run',
@@ -83,6 +89,7 @@ function useNav(): { group: string; items: NavItem[] }[] {
         { route: { page: 'services' }, label: 'Services', icon: <Server /> },
         { route: { page: 'caddyfile' }, label: 'Caddyfile', icon: <FileCode2 /> },
         { route: { page: 'settings' }, label: 'Settings', icon: <Settings2 /> },
+        { route: { page: 'access' }, label: 'Access', icon: <ShieldCheck />, warn: access },
       ],
     },
   ];
@@ -102,6 +109,12 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
   const { data: sys } = useSystem();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(currentTheme);
+  const { data: auth } = useAuth();
+  const signedIn = auth?.passwordSet;
+  const signOut = async () => {
+    await post('/api/auth/logout');
+    location.reload();
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: close the drawer whenever the route changes
   useEffect(() => setOpen(false), [route]);
@@ -156,7 +169,9 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
                 >
                   {item.icon}
                   {item.label}
-                  {item.alert ? (
+                  {item.warn ? (
+                    <span className="nav-warn" title="Two-factor sign-in is off while the dashboard is public" />
+                  ) : item.alert ? (
                     <span className="nav-alert">{item.alert}</span>
                   ) : item.count != null ? (
                     <span className="nav-count">{item.count}</span>
@@ -184,6 +199,11 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
             <Button iconOnly icon={theme === 'dark' ? <Sun /> : <Moon />} onClick={toggleTheme}>
               {theme === 'dark' ? 'Use light theme' : 'Use dark theme'}
             </Button>
+            {signedIn && (
+              <Button iconOnly icon={<LogOut />} onClick={signOut}>
+                Sign out
+              </Button>
+            )}
           </div>
         </div>
       </aside>

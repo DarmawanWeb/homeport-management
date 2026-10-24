@@ -26,6 +26,7 @@ const PAGES: [Route['page'], string][] = [
   ['services', 'Services'],
   ['caddyfile', 'Caddyfile'],
   ['settings', 'Settings'],
+  ['access', 'Access and security'],
 ];
 
 /** ⌘K: jump to any page or app, or trigger a deploy, without touching the mouse. */

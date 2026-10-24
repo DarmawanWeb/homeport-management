@@ -159,7 +159,6 @@ export type PublicSettings = Settings & { cfApiTokenSet: boolean; telegramTokenS
 export interface StateDTO {
   sites: Site[];
   settings: PublicSettings;
-  authRequired: boolean;
   platform: string;
 }
 
@@ -259,4 +258,31 @@ export interface QueryRangeDTO {
   series: Series[];
   available: boolean;
   error?: string;
+}
+
+// ---------------------------------------------------------------- auth
+
+export interface AuthStatusDTO {
+  passwordSet: boolean;
+  authenticated: boolean;
+  /** The browser is on the Mac itself, not coming in through a public hostname. */
+  local: boolean;
+  totpEnabled: boolean;
+  publicUrls: string[];
+}
+
+export interface SessionView {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string;
+  ip: string;
+  userAgent: string;
+  via: 'local' | 'remote';
+  current: boolean;
+}
+
+export interface PublicAccessDTO {
+  sites: { id: string; hostname: string; tunnel: string; enabled: boolean }[];
+  defaultTunnel: string;
+  dashboardPort: number;
 }

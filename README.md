@@ -6,7 +6,7 @@
 
 **Push to GitHub, and it runs on the Mac mini under your desk.**
 
-A self-hosted deploy platform for Node apps: git push deploys with automatic rollback, domains through Cloudflare Tunnel with no open ports, and Prometheus and Grafana monitoring, all managed from one local dashboard.
+A self-hosted deploy platform for Node apps: git push deploys with automatic rollback, domains through Cloudflare Tunnel with no open ports, Prometheus and Grafana monitoring, and a dashboard you can open from anywhere behind a password and two-factor sign-in.
 
 [![CI](https://github.com/DarmawanWeb/homeport-management/actions/workflows/ci.yml/badge.svg)](https://github.com/DarmawanWeb/homeport-management/actions/workflows/ci.yml)
 [![Docs](https://github.com/DarmawanWeb/homeport-management/actions/workflows/docs.yml/badge.svg)](https://darmawanweb.github.io/homeport-management/)
@@ -40,6 +40,7 @@ Hosted platforms fix all of this, but they charge per app, sleep free services, 
 | A Caddyfile typo takes all sites down | Caddy validates the generated file before it replaces the running one |
 | `pm2 logs` over SSH | Logs, deploy history, metrics and alerts in one place |
 | Find out from users | Discord or Telegram when an app goes down, and again when it recovers |
+| SSH in to check a deploy | Open `deploy.yourdomain.com` from your phone, sign in with password and authenticator code |
 
 ## Screenshots
 
@@ -51,6 +52,8 @@ Hosted platforms fix all of this, but they charge per app, sleep free services, 
 | **Live deploy log.** This build failed its health check and was rolled back automatically. | **Monitoring.** Prometheus alerts, request rate and latency per domain, CPU and memory per app. |
 | ![Command palette](docs/public/screenshots/command-palette.png) | ![Dark theme](docs/public/screenshots/overview-dark.png) |
 | **⌘K command palette** to jump to any page or app, or start a deploy. | **Night palette** taken from marine chart displays, following the system setting. |
+| ![Sign-in with two-factor](docs/public/screenshots/login-code.png) | ![Access page](docs/public/screenshots/access.png) |
+| **Sign in from anywhere.** Password plus a TOTP code; recovery codes if the phone is gone. | **Access.** Publish the dashboard on a hostname, manage two-factor, see and sign out devices. |
 
 ## How it works
 
@@ -82,7 +85,8 @@ Things that were harder than they looked, and how they were solved.
 - **Version-aware metrics.** `metrics { per_host }` only exists in Caddy 2.9 and newer. Homeport probes the installed Caddy once and emits the syntax it accepts.
 - **Safe concurrent state.** Early versions occasionally failed a rename when several saves overlapped. Writes are now serialized and coalesced, and always go through a temp file and rename. ([decision 5](docs/decisions/0005-json-store.md))
 - **Monitoring checked in CI.** Every PromQL expression in the dashboards and alert rules is sent to a real Prometheus in CI, and the generated config goes through `promtool check config`. Renaming a metric can't quietly break a panel. ([decision 6](docs/decisions/0006-as-code.md))
-- **Small public surface.** Only the webhook path is reachable from the internet. The dashboard API binds to localhost, requires a custom header on every mutation (CSRF), validates all input with Zod, and never builds shell strings from input. ([security model](docs/guide/security.md))
+- **A public dashboard whose trust starts on the Mac.** The dashboard can be published like a hosted platform's, but only a request that is genuinely local (loopback socket, loopback `Host`, no proxy headers, which also defeats DNS rebinding) can set the first password or recover a lost one. Passwords are scrypt-hashed, two-factor is RFC 6238 TOTP with replay protection and single-use recovery codes, session tokens are stored only as hashes, and sign-in has per-address and global lockouts. An integration test drives the whole flow, from first setup through remote sign-in, code replay and password change. ([decision 7](docs/decisions/0007-public-dashboard))
+- **Small public surface.** Apps and the webhook path are public; the dashboard only if you publish it. The API binds to localhost, requires a custom header and matching Origin on every mutation (CSRF), sends a strict CSP, validates all input with Zod, and never builds shell strings from input. ([security model](docs/guide/security.md))
 
 ## Tech stack
 
@@ -101,7 +105,7 @@ Things that were harder than they looked, and how they were solved.
 git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
 cd ~/homeport
 bash setup-mac.sh          # installs Caddy, cloudflared, pm2, Prometheus, Grafana; builds and starts Homeport
-open http://127.0.0.1:7070
+open http://127.0.0.1:7070   # set a password, then optionally publish it under Access
 ```
 
 Moving from a hand-made Caddy or tunnel setup? `bash reset-mac.sh --dry-run` lists what it would remove, and `bash reset-mac.sh` removes it step by step after backing up the config.

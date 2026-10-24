@@ -65,5 +65,5 @@ y "Recommended for a Mac used as a server (needs sudo):"
 echo "  sudo pmset -a sleep 0 disksleep 0 autorestart 1 womp 1"
 echo "  and turn on automatic login for this user, so pm2 starts after a power cut"
 echo
-g "✓ Done. Open http://127.0.0.1:7070"
+g "✓ Done. Open http://127.0.0.1:7070 on this Mac and set a dashboard password."
 open "http://127.0.0.1:7070" 2>/dev/null || true

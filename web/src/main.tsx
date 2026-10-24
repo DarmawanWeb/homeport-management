@@ -11,14 +11,15 @@ import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CommandPalette } from './components/CommandPalette';
 import { Shell } from './components/Shell';
-import { UNAUTHORIZED_EVENT } from './lib/api';
 import { DialogProvider } from './lib/dialog';
 import { useRoute } from './lib/router';
 import { ToastProvider } from './lib/toast';
+import { Access } from './pages/Access';
 import { AppDetail } from './pages/AppDetail';
 import { Apps } from './pages/Apps';
+import { AuthGate } from './pages/Auth';
 import { Domains } from './pages/Domains';
-import { Activity, Caddyfile, Login } from './pages/Misc';
+import { Activity, Caddyfile } from './pages/Misc';
 import { Monitoring } from './pages/Monitoring';
 import { Overview } from './pages/Overview';
 import { Services } from './pages/Services';
@@ -39,25 +40,22 @@ const TITLES: Record<string, string> = {
   caddyfile: 'Caddyfile',
   activity: 'Activity log',
   settings: 'Settings',
+  access: 'Access',
 };
 
 function App() {
   const route = useRoute();
-  const [needLogin, setNeedLogin] = useState(false);
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {
-    const onUnauthorized = () => setNeedLogin(true);
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((p) => !p);
       }
     };
-    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
       window.removeEventListener('keydown', onKey);
     };
   }, []);
@@ -65,16 +63,6 @@ function App() {
   useEffect(() => {
     document.title = `${route.page === 'app' ? route.id : TITLES[route.page]} · Homeport`;
   }, [route]);
-
-  if (needLogin)
-    return (
-      <Login
-        onDone={() => {
-          setNeedLogin(false);
-          void queryClient.invalidateQueries();
-        }}
-      />
-    );
 
   return (
     <Shell route={route} onSearch={() => setPalette(true)}>
@@ -88,6 +76,7 @@ function App() {
       {route.page === 'caddyfile' && <Caddyfile />}
       {route.page === 'activity' && <Activity />}
       {route.page === 'settings' && <Settings />}
+      {route.page === 'access' && <Access />}
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </Shell>
   );
@@ -98,7 +87,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <DialogProvider>
-          <App />
+          <AuthGate>
+            <App />
+          </AuthGate>
         </DialogProvider>
       </ToastProvider>
     </QueryClientProvider>

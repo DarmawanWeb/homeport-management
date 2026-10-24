@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { StateDTO, StatusDTO, TunnelView } from '../../shared/types.js';
-import { env } from '../config.js';
 import { activity } from '../lib/activity.js';
 import { badRequest, parse } from '../lib/errors.js';
 import { events } from '../lib/events.js';
@@ -31,7 +30,6 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
     async (): Promise<StateDTO> => ({
       sites: db.sites,
       settings: publicSettings(),
-      authRequired: !!env.password,
       platform: process.platform,
     }),
   );
