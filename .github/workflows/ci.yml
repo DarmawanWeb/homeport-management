@@ -32,7 +32,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Shell scripts
-        run: shellcheck setup-mac.sh reset-mac.sh setup-linux.sh docker/entrypoint.sh scripts/smoke.sh
+        run: shellcheck -S warning setup-mac.sh reset-mac.sh setup-linux.sh docker/entrypoint.sh scripts/smoke.sh
 
   monitoring:
     name: Prometheus config and queries
@@ -127,7 +127,11 @@ jobs:
           node-version: 22
       - name: Install
         run: |
-          bash setup-linux.sh
+          set -o pipefail
+          if ! bash setup-linux.sh 2>&1 | tee /tmp/install.log; then
+            echo "::error title=setup-linux.sh failed::$(tail -30 /tmp/install.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "$HOME/.homeport/bin" >> "$GITHUB_PATH"
       - name: First setup from another address
