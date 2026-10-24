@@ -1,15 +1,22 @@
 {
   "name": "homeport",
-  "version": "3.0.0",
-  "description": "Self-hosted mini PaaS for a Mac mini: git push deploys, pm2, Caddy, Cloudflare Tunnel, Prometheus & Grafana",
+  "version": "3.1.0",
+  "description": "Self-hosted deploy platform for a Mac mini: git push deploys with rollback, pm2, Caddy, Cloudflare Tunnel, Prometheus and Grafana.",
   "main": "dist/server/index.js",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
     "dev:web": "vite",
     "build": "tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/index.js",
+    "check": "biome check .",
+    "fix": "biome check --write .",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "diagrams": "tsx scripts/diagrams.ts",
+    "check:monitoring": "tsx scripts/check-monitoring.ts .tmp/monitoring",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "license": "MIT",
   "dependencies": {
@@ -20,21 +27,43 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@tanstack/react-query": "^5.104.5",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "lucide-react": "^1.61.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
+    "vitepress": "^1.6.4",
     "vitest": "^5.0.5"
   },
   "type": "module",
   "private": true,
   "engines": {
     "node": ">=20"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DarmawanWeb/homeport-management.git"
+  },
+  "homepage": "https://darmawanweb.github.io/homeport-management/",
+  "keywords": [
+    "paas",
+    "self-hosted",
+    "deploy",
+    "pm2",
+    "caddy",
+    "cloudflare-tunnel",
+    "prometheus",
+    "grafana",
+    "mac-mini"
+  ]
 }

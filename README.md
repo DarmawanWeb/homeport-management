@@ -1,153 +1,139 @@
+<div align="center">
+
+<img src="docs/public/favicon.svg" width="56" alt="" />
+
 # Homeport
 
-Platform deploy pribadi untuk Mac mini: **push ke GitHub → otomatis build & jalan → online di domain kamu**, lengkap dengan monitoring Prometheus + Grafana dan notifikasi Discord/Telegram.
+**Push to GitHub, and it runs on the Mac mini under your desk.**
 
-```
-                ┌───────────────────────────────── Mac mini ──────────────────────────────────┐
- git push       │                                                                             │
- GitHub ─webhook─► hooks.domain.com ─┐                                                        │
-                │                    │ Cloudflare  ┌────────┐                                 │
- Pengunjung ────►  toko.domain.com ──┼─  Tunnel  ─►│ Caddy  │─► :3001 web-toko ┐              │
-                │   api.domain.com ──┘             │ :8080  │─► :3002 api      ├─ pm2         │
-                │                                  │        │─► :9000 webhook ─┘→ deploy      │
-                │                                  └────────┘                                 │
-                │  Prometheus :9090 ◄─ scrape ─ Homeport · Caddy · cloudflared · node_exporter│
-                │  Grafana :3300 · Dashboard Homeport :7070 (semua hanya 127.0.0.1)           │
-                └─────────────────────────────────────────────────────────────────────────────┘
-```
+A self-hosted deploy platform for Node apps: git push deploys with automatic rollback, domains through Cloudflare Tunnel with no open ports, and Prometheus and Grafana monitoring, all managed from one local dashboard.
 
-- **Tanpa buka port router / IP publik.** Semua lewat Cloudflare Tunnel, HTTPS dari Cloudflare.
-- **Semua proses di pm2:** app kamu, Caddy, tunnel, Prometheus, Grafana, dan Homeport sendiri.
-- **TypeScript penuh:** server Fastify + Zod, UI React + Vite, dengan tipe yang dipakai bersama.
+[![CI](https://github.com/DarmawanWeb/homeport-management/actions/workflows/ci.yml/badge.svg)](https://github.com/DarmawanWeb/homeport-management/actions/workflows/ci.yml)
+[![Docs](https://github.com/DarmawanWeb/homeport-management/actions/workflows/docs.yml/badge.svg)](https://darmawanweb.github.io/homeport-management/)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-1d5c88)
+![License](https://img.shields.io/badge/license-MIT-1e8a5a)
 
-## Pasang
+[Documentation](https://darmawanweb.github.io/homeport-management/) · [Architecture](https://darmawanweb.github.io/homeport-management/reference/architecture) · [Design decisions](https://darmawanweb.github.io/homeport-management/decisions/)
 
-**Sudah punya setup Caddy / Cloudflare Tunnel lama?** Bersihkan dulu:
+<img src="docs/public/screenshots/overview.png" alt="Homeport overview: the traffic route from visitors through Cloudflare, the tunnel and Caddy to each app, with a status light per hop" />
 
-```bash
-bash reset-mac.sh --dry-run   # lihat dulu apa saja yang ditemukan
-bash reset-mac.sh             # hapus, dengan konfirmasi di setiap langkah
-```
+</div>
 
-Skrip ini menghentikan service lama dan menghapus tunnel di Cloudflare. Config lama di-backup ke `~/homeport-reset-backup-*.tgz`. Login cloudflared (`cert.pem`) dibiarkan kecuali kamu memilih menghapusnya. CNAME DNS ikut terhapus kalau dijalankan dengan `CF_API_TOKEN=…`.
+## The problem
 
+A Mac mini makes a very good small server: quiet, cheap to run, and fast enough for a handful of Node services. Running apps on it, though, usually means:
+
+- **Manual deploys.** SSH in, `git pull`, `npm ci`, `npm run build`, `pm2 restart`, for every change to every app.
+- **No way back.** A broken build stays broken until someone notices and reverts by hand.
+- **Fragile routing.** A hand-edited `cloudflared` config plus a hand-edited Caddyfile, where one typo on reload takes every site down.
+- **Flying blind.** No history of what version is running, and no alert when an app crashes at night.
+
+Hosted platforms fix all of this, but they charge per app, sleep free services, and move code and data off hardware you already own.
+
+## What Homeport does
+
+| Before | With Homeport |
+|---|---|
+| SSH, pull, build, restart | `git push`, then watch the build log live in the dashboard |
+| Broken deploy stays broken | The last good commit is rebuilt automatically, and you get a message saying so |
+| Edit tunnel YAML, add DNS, edit Caddyfile, restart | Fill in one form; DNS, tunnel ingress and Caddy update together |
+| A Caddyfile typo takes all sites down | Caddy validates the generated file before it replaces the running one |
+| `pm2 logs` over SSH | Logs, deploy history, metrics and alerts in one place |
+| Find out from users | Discord or Telegram when an app goes down, and again when it recovers |
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Apps with deploy history strips](docs/public/screenshots/apps.png) | ![App page with deploy history and commits](docs/public/screenshots/app-detail.png) |
+| **Apps.** Each row has a strip of the last 20 deploys: green succeeded, red failed, split for rolled back. | **App page.** Deploy history with build logs, and any commit on the branch one click from production. |
+| ![A failed deploy rolling back](docs/public/screenshots/deploy-log.png) | ![Monitoring with alerts and charts](docs/public/screenshots/monitoring.png) |
+| **Live deploy log.** This build failed its health check and was rolled back automatically. | **Monitoring.** Prometheus alerts, request rate and latency per domain, CPU and memory per app. |
+| ![Command palette](docs/public/screenshots/command-palette.png) | ![Dark theme](docs/public/screenshots/overview-dark.png) |
+| **⌘K command palette** to jump to any page or app, or start a deploy. | **Night palette** taken from marine chart displays, following the system setting. |
+
+## How it works
+
+<img src="docs/public/diagrams/architecture.drawio.svg" alt="Architecture diagram" />
+
+Visitors and GitHub webhooks reach Cloudflare. A `cloudflared` tunnel, dialled out from the Mac, brings every hostname to a single Caddy, which routes by Host header to each app's local port. Homeport generates all of that configuration from what you enter in the dashboard, and runs every piece under pm2. Nothing listens on a public interface.
+
+### A deploy
+
+<img src="docs/public/diagrams/deploy-pipeline.drawio.svg" alt="Deploy pipeline diagram" />
+
+1. A push arrives. The webhook's HMAC-SHA256 signature and branch are checked.
+2. The deploy joins the app's queue. Pushes that land during a deploy collapse into one follow-up.
+3. The branch is fetched and reset hard. The package manager is detected from the lockfile (npm, pnpm, yarn, bun).
+4. Install and build run in their own process group with timeouts.
+5. pm2 reloads the app; the old process serves until the new one is ready.
+6. Homeport waits for the port to answer. Three restarts in that window fail the deploy early.
+7. On failure, the last commit that worked is rebuilt. Either way, a notification goes out.
+
+Diagrams are `.drawio.svg` files generated by [`scripts/diagrams.ts`](scripts/diagrams.ts). GitHub renders them as images, and draw.io opens them as editable diagrams.
+
+## Engineering highlights
+
+Things that were harder than they looked, and how they were solved.
+
+- **Configuration that cannot break production.** The Caddyfile, tunnel ingress, pm2 ecosystem files, Prometheus config, alert rules and Grafana dashboards are all produced by pure functions from stored state. A Caddy change is validated with `caddy validate` before it is saved, and rolled back in memory if Caddy rejects it. ([decision 4](docs/decisions/0004-generated-config.md))
+- **pm2 inheriting its own identity.** Under pm2 7, every process Homeport started was registered as `homeport`, because pm2 had injected `name=homeport` into Homeport's environment and reads it back in preference to `--name`. Found on the real Mac mini, reproduced against the same pm2 version, and fixed by stripping pm2's metadata from every child environment. A regression test covers it.
+- **Telling crashes from deploys.** pm2's restart counter rises on every reload, so a naive crash-loop alert fired on busy deploy days. Planned actions now open a short "expected restart" window, and only restarts outside it increment `homeport_app_crashes_total`.
+- **Version-aware metrics.** `metrics { per_host }` only exists in Caddy 2.9 and newer. Homeport probes the installed Caddy once and emits the syntax it accepts.
+- **Safe concurrent state.** Early versions occasionally failed a rename when several saves overlapped. Writes are now serialized and coalesced, and always go through a temp file and rename. ([decision 5](docs/decisions/0005-json-store.md))
+- **Monitoring checked in CI.** Every PromQL expression in the dashboards and alert rules is sent to a real Prometheus in CI, and the generated config goes through `promtool check config`. Renaming a metric can't quietly break a panel. ([decision 6](docs/decisions/0006-as-code.md))
+- **Small public surface.** Only the webhook path is reachable from the internet. The dashboard API binds to localhost, requires a custom header on every mutation (CSRF), validates all input with Zod, and never builds shell strings from input. ([security model](docs/guide/security.md))
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Server | Node 20+, TypeScript (strict), Fastify 5, Zod 4, prom-client |
+| Dashboard | React 19, TanStack Query, Vite, lucide icons, hand-written CSS with design tokens, hand-rolled SVG charts |
+| Runtime | pm2, Caddy, cloudflared |
+| Observability | Prometheus, Grafana, node_exporter, Discord and Telegram webhooks |
+| Quality | Biome (lint and format), Vitest, `tsc` for both projects, Prometheus and promtool in CI |
+| Docs | VitePress on GitHub Pages, architecture decision records, draw.io diagrams as code |
+
+## Quick start
 
 ```bash
 git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
 cd ~/homeport
-bash setup-mac.sh                 # tambah --no-monitoring kalau tidak mau Prometheus/Grafana
+bash setup-mac.sh          # installs Caddy, cloudflared, pm2, Prometheus, Grafana; builds and starts Homeport
+open http://127.0.0.1:7070
 ```
 
-Skrip ini memasang Homebrew packages, pm2, dan pm2-logrotate, lalu build dan menjalankan Homeport. Di akhir, jalankan perintah `sudo …` yang dicetak supaya semuanya hidup lagi setelah reboot. Untuk **update**, cukup `git pull && bash setup-mac.sh`.
+Moving from a hand-made Caddy or tunnel setup? `bash reset-mac.sh --dry-run` lists what it would remove, and `bash reset-mac.sh` removes it step by step after backing up the config.
 
-Buka **http://127.0.0.1:7070**, lalu:
+The [getting started guide](https://darmawanweb.github.io/homeport-management/guide/getting-started) covers first-run setup, remote access over SSH, and keeping the Mac awake.
 
-1. **Login Cloudflare.** Klik banner, pilih domain, lalu Authorize.
-2. **Tunnels → Buat tunnel**, misalnya `macmini`. Satu tunnel cukup untuk semua domain.
-3. **Services → Start Caddy.**
-4. **Settings → Webhook.** Isi `hooks.domainkamu.com`, lalu klik **Buat domain webhook**.
-5. **Monitoring → Aktifkan monitoring** (opsional, tapi seru).
-6. **Settings → Notifikasi.** Tempel URL webhook Discord atau token bot Telegram, lalu klik **kirim tes**.
-
-## Deploy app
-
-**Apps → + Tambah app dari Git**, lalu isi URL repo, branch, port (otomatis 3001, 3002, …), domain (opsional), dan env vars.
-
-```
-git clone → install → build → pm2 start/reload → tunggu port merespon → ✓
-```
-
-- Package manager dideteksi dari lockfile (npm / pnpm / yarn / bun). Perintah bisa di-override per app, dan `-` berarti lewati langkah itu.
-- **Syarat untuk app kamu:** harus listen di `process.env.PORT`.
-- **Auto-deploy:** klik **Webhook** di kartu app, lalu salin URL dan secret ke GitHub → Settings → Webhooks (content type `application/json`, event *push*). Alternatifnya mode **Cek berkala** (polling `git ls-remote`) tanpa endpoint publik.
-- **Gagal?** Kalau build error, app crash-loop, atau port tidak terbuka, deploy ditandai gagal dan otomatis **rollback** ke commit terakhir yang sukses. Riwayat menampilkan log tiap deploy, dan kamu bisa deploy commit mana pun.
-- **Repo private:** pakai token GitHub fine-grained (Contents: Read) di form app, yang tidak disimpan di `.git/config`. Atau pakai URL `git@github.com:…` dengan SSH key di Mac.
-
-## Monitoring
-
-Satu klik di tab **Monitoring** menjalankan:
-
-| Komponen | Port | Isi |
-|---|---|---|
-| Prometheus | 9090 | Scrape tiap 15 detik, retensi 30 hari, mengevaluasi aturan alert |
-| Grafana | 3300 | Dashboard **Homeport — Overview** dan **Homeport — Mac mini**, sudah ter-provision |
-| node_exporter | 9100 | CPU, disk I/O, jaringan, filesystem |
-| Homeport exporter | 9101 | Status app, CPU/RAM per proses pm2, deploy (jumlah, durasi, sukses/gagal), webhook, upstream domain, tunnel, RAM/disk Mac |
-
-Prometheus juga men-scrape **Caddy**, sehingga ada request/detik, status code, dan latensi p50/p95/p99 per domain. Caddy ≥ 2.9 terdeteksi otomatis untuk metrics per host. Prometheus juga men-scrape **cloudflared**, untuk koneksi edge dan request per tunnel.
-
-Grafik utama juga tampil langsung di dashboard Homeport (Overview, Monitoring, dan tombol **Metrics** di tiap app) tanpa perlu membuka Grafana. Grafana bisa dilihat tanpa login (viewer). Password admin ada di Monitoring → Grafana → **Login admin**.
-
-**Alert bawaan** (diteruskan ke Discord/Telegram, termasuk saat pulih):
-
-| Alert | Kondisi |
-|---|---|
-| AppDown | App tidak merespon > 2 menit (diabaikan selama deploy) |
-| AppCrashLoop | Restart > 3x dalam 10 menit |
-| AppHighMemory | Proses app > 1.5 GB selama 10 menit |
-| DomainUpstreamDown | Upstream sebuah domain tidak merespon > 3 menit |
-| TunnelDown / TunnelDisconnected | Proses tunnel mati, atau jalan tapi 0 koneksi ke Cloudflare |
-| CaddyDown | Caddy tidak bisa di-scrape |
-| HighErrorRate | > 5% request ke sebuah domain error 5xx |
-| HostDiskAlmostFull / HostHighMemory / HostHighCpu | Disk > 90%, RAM > 92%, CPU > 90% |
-
-Tanpa monitoring pun, notifikasi **deploy** dan **app down** tetap jalan lewat watcher bawaan.
-
-## Struktur kode
-
-```
-src/
-  shared/types.ts          tipe yang dipakai server & UI
-  server/
-    index.ts               bootstrap
-    app.ts                 Fastify: auth, CSRF guard, error handler, static UI
-    config.ts · store.ts   path, default settings, db.json (tulis berurutan & atomik)
-    lib/                   exec (spawn/stream), validators (zod), events, errors
-    services/              caddy · cloudflared · cloudflareApi · pm2 · sites · apps · deploy · webhooks · notify
-    monitoring/            exporter (prom-client) · configs · dashboards (Grafana JSON dari kode) · service · alerts
-    routes/                infra · apps · settings
-web/src/                   React: pages/, components/ (Chart SVG, dialog, ui), lib/ (api, queries, toast)
-test/                      vitest
-```
+## Development
 
 ```bash
-npm run dev        # server dengan reload (tsx watch)
-npm run dev:web    # UI di http://localhost:5173 (proxy ke :7070)
+npm ci
+npm run dev          # API on :7070 with reload
+npm run dev:web      # dashboard on :5173
+npm run check        # Biome
 npm run typecheck
 npm test
-npm run build
+npm run docs:dev
 ```
 
-## Keamanan
-
-- Dashboard, Prometheus, Grafana, dan exporter hanya listen di `127.0.0.1`. **Jangan** buat domain yang mengarah ke port-port itu.
-- Yang terbuka ke internet hanya webhook server (`/hooks/<id>`), dan setiap request diverifikasi dengan HMAC-SHA256 memakai secret per app.
-- Semua API yang mengubah data butuh header `X-Homeport: 1`, sehingga situs lain tidak bisa memicu aksi lewat browser kamu (CSRF).
-- Untuk akses dari LAN, set `HOST: '0.0.0.0'` dan `TM_PASSWORD` di `ecosystem.config.cjs`. Pilihan yang lebih aman: Cloudflare Access.
-- Perintah install/build dijalankan sebagai user kamu. Hanya tambahkan repo yang kamu percaya.
-
-## Troubleshooting
-
-| Masalah | Cek |
-|---|---|
-| Deploy gagal "tidak listen di port" | App tidak membaca `process.env.PORT`, atau crash. Lihat 40 baris log di akhir log deploy |
-| `npm: command not found` saat deploy | `pm2 kill && pm2 resurrect` dari Terminal biasa (agar PATH Homebrew terbawa) |
-| Webhook 401 (GitHub → Recent Deliveries) | Secret beda, atau content type bukan `application/json` |
-| Domain 404 dari Caddy | Hostname belum ada di Domains, atau perlu Caddyfile → Apply |
-| Error 1033 dari Cloudflare | Tunnel tidak jalan → Tunnels → Start |
-| Grafana "folder instalasi tidak ditemukan" | Isi Settings → Monitoring → Grafana home, mis. `/opt/homebrew/opt/grafana/share/grafana` |
-| Port sudah dipakai | `brew services stop caddy grafana prometheus` |
-
-## Lokasi data
-
 ```
-~/apps/<app>/                  kode app (hasil clone)
-data/db.json                   app, domain, settings, riwayat deploy
-data/deploy-logs/              log tiap deploy
-data/ecosystem/                config pm2 per app
-data/Caddyfile, data/tunnels/  config Caddy & cloudflared
-data/monitoring/               config + data Prometheus & Grafana
-~/.cloudflared/                cert.pem + kredensial tunnel
+src/shared/       types shared by server and dashboard
+src/server/       Fastify app, services (deploy, caddy, cloudflared, pm2, webhooks, notify), monitoring
+web/src/          React dashboard
+scripts/          diagram generator, monitoring checks
+docs/             VitePress site, guides, reference, decision records
 ```
 
-Untuk backup, salin `data/` atau pakai Settings → Export backup. Secret tidak ikut di file export.
+See [development](https://darmawanweb.github.io/homeport-management/reference/development) for conventions and the CI pipeline.
+
+## Scope
+
+Homeport is meant for one person or a small team running trusted Node services on one machine. It is not a multi-tenant host, and apps are not isolated from each other. The [design decisions](https://darmawanweb.github.io/homeport-management/decisions/) explain why it uses pm2 instead of containers, and what that costs.
+
+## License
+
+[MIT](LICENSE)

@@ -1,0 +1,43 @@
+/* Same chart-paper palette as the dashboard. */
+:root {
+  --vp-font-family-base: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", ui-monospace, monospace;
+  --vp-c-bg: #f2f4ef;
+  --vp-c-bg-alt: #e9ede6;
+  --vp-c-bg-soft: #e9ede6;
+  --vp-c-text-1: #14283b;
+  --vp-c-text-2: #3e5266;
+  --vp-c-divider: #d6dcd3;
+  --vp-c-brand-1: #1d5c88;
+  --vp-c-brand-2: #164a6f;
+  --vp-c-brand-3: #1d5c88;
+  --vp-c-brand-soft: #dde9f1;
+  --vp-button-brand-bg: #1d5c88;
+  --vp-button-brand-hover-bg: #164a6f;
+  --vp-home-hero-name-color: #14283b;
+}
+.dark {
+  --vp-c-bg: #0d1822;
+  --vp-c-bg-alt: #0f1c27;
+  --vp-c-bg-soft: #13212e;
+  --vp-c-text-1: #dce6ee;
+  --vp-c-text-2: #a8b9c8;
+  --vp-c-divider: #22364a;
+  --vp-c-brand-1: #5ba8e0;
+  --vp-c-brand-2: #84bfea;
+  --vp-c-brand-3: #2f7ab3;
+  --vp-c-brand-soft: #173149;
+  --vp-button-brand-text: #08131c;
+  --vp-home-hero-name-color: #dce6ee;
+}
+.VPHero .name,
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: "Barlow Semi Condensed", "Barlow", sans-serif;
+  font-weight: 600;
+}
+.vp-doc img {
+  border-radius: 10px;
+  border: 1px solid var(--vp-c-divider);
+}

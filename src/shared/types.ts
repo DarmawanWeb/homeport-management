@@ -135,7 +135,12 @@ export interface DbShape {
 
 // ---------------------------------------------------------------- API DTOs
 
-export interface ActivityEntry { t: string; level: 'info' | 'warn' | 'error'; msg: string; detail: string }
+export interface ActivityEntry {
+  t: string;
+  level: 'info' | 'warn' | 'error';
+  msg: string;
+  detail: string;
+}
 
 export interface Pm2Proc {
   name: string;
@@ -184,9 +189,16 @@ export interface AppView extends PublicApp {
   pm2: { status: string; cpu: number; mem: number; uptime: number | null; restarts: number } | null;
   up: boolean;
   domains: string[];
+  /** Newest first, at most 20 — drives the deploy history strip. */
+  recentDeploys: Pick<Deploy, 'id' | 'status' | 'createdAt' | 'commit' | 'msg' | 'trigger' | 'rolledBackTo'>[];
 }
 
-export interface AppsDTO { apps: AppView[]; nextPort: number; webhookDomain: string; webhookPort: number }
+export interface AppsDTO {
+  apps: AppView[];
+  nextPort: number;
+  webhookDomain: string;
+  webhookPort: number;
+}
 
 export interface SystemDTO {
   hostname: string;
@@ -226,8 +238,25 @@ export interface MonitoringStatus {
   targets: { job: string; instance: string; health: string; lastError: string }[];
 }
 
-export interface PromAlert { name: string; state: string; severity: string; summary: string; labels: Record<string, string>; activeAt: string }
+export interface PromAlert {
+  name: string;
+  state: string;
+  severity: string;
+  summary: string;
+  labels: Record<string, string>;
+  activeAt: string;
+}
 
-export interface SeriesPoint { t: number; v: number }
-export interface Series { label: string; points: SeriesPoint[] }
-export interface QueryRangeDTO { series: Series[]; available: boolean; error?: string }
+export interface SeriesPoint {
+  t: number;
+  v: number;
+}
+export interface Series {
+  label: string;
+  points: SeriesPoint[];
+}
+export interface QueryRangeDTO {
+  series: Series[];
+  available: boolean;
+  error?: string;
+}

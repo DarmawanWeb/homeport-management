@@ -1,36 +1,69 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { defaultSettings } from '../src/server/config.js';
+import { splitCommand } from '../src/server/lib/exec.js';
+import { bracesBalanced, envMap } from '../src/server/lib/validators.js';
+import { grafanaIni, prometheusConfig, rulesConfig } from '../src/server/monitoring/configs.js';
+import { allDashboards, DATASOURCE_UID } from '../src/server/monitoring/dashboards.js';
 import { generateCaddyfile } from '../src/server/services/caddy.js';
 import { generateIngress } from '../src/server/services/cloudflared.js';
 import { detectProject, generateEcosystem, gitAuthArgs } from '../src/server/services/deploy.js';
 import { verifySignature } from '../src/server/services/webhooks.js';
-import { splitCommand } from '../src/server/lib/exec.js';
-import { envMap, bracesBalanced } from '../src/server/lib/validators.js';
-import { prometheusConfig, rulesConfig, grafanaIni } from '../src/server/monitoring/configs.js';
-import { allDashboards, DATASOURCE_UID } from '../src/server/monitoring/dashboards.js';
-import { defaultSettings } from '../src/server/config.js';
 import type { App, Site } from '../src/shared/types.js';
 
 const site = (over: Partial<Site> = {}): Site => ({
-  id: 'x', hostname: 'app.example.com', upstreamHost: 'localhost', upstreamPort: 3000, scheme: 'http', tlsInsecure: false,
-  tunnel: 't', pm2Name: 'app', enabled: true, compress: false, basicAuthUser: '', basicAuthHash: '', extra: '', notes: '',
-  createdAt: '', ...over,
+  id: 'x',
+  hostname: 'app.example.com',
+  upstreamHost: 'localhost',
+  upstreamPort: 3000,
+  scheme: 'http',
+  tlsInsecure: false,
+  tunnel: 't',
+  pm2Name: 'app',
+  enabled: true,
+  compress: false,
+  basicAuthUser: '',
+  basicAuthHash: '',
+  extra: '',
+  notes: '',
+  createdAt: '',
+  ...over,
 });
 
 const app = (over: Partial<App> = {}): App => ({
-  id: 'id', name: 'web', repo: 'https://github.com/a/b.git', branch: 'main', port: 3001, installCmd: '', buildCmd: '', startCmd: '',
-  env: {}, autoDeploy: 'webhook', pollInterval: 60, autoRollback: true, healthTimeout: 40, maxMemory: '', gitToken: '',
-  webhookSecret: 's', notes: '', createdAt: '', ...over,
+  id: 'id',
+  name: 'web',
+  repo: 'https://github.com/a/b.git',
+  branch: 'main',
+  port: 3001,
+  installCmd: '',
+  buildCmd: '',
+  startCmd: '',
+  env: {},
+  autoDeploy: 'webhook',
+  pollInterval: 60,
+  autoRollback: true,
+  healthTimeout: 40,
+  maxMemory: '',
+  gitToken: '',
+  webhookSecret: 's',
+  notes: '',
+  createdAt: '',
+  ...over,
 });
 
 const caddySettings = { caddyAdmin: 'localhost:2019', caddyHttpPort: 8080, caddyGlobalExtra: '', caddyRawAppend: '' };
 
 describe('Caddyfile', () => {
   it('routes enabled sites and skips disabled ones', () => {
-    const out = generateCaddyfile({ settings: caddySettings, sites: [site(), site({ hostname: 'off.example.com', enabled: false })], metrics: 'none' });
+    const out = generateCaddyfile({
+      settings: caddySettings,
+      sites: [site(), site({ hostname: 'off.example.com', enabled: false })],
+      metrics: 'none',
+    });
     expect(out).toContain('http://app.example.com {\n\treverse_proxy http://localhost:3000\n}');
     expect(out).not.toContain('off.example.com');
     expect(out).toContain(':8080 {');
@@ -45,7 +78,8 @@ describe('Caddyfile', () => {
   it('adds basic auth, compression and insecure TLS transport', () => {
     const hash = `$2a$14$${'a'.repeat(53)}`;
     const out = generateCaddyfile({
-      settings: caddySettings, metrics: 'none',
+      settings: caddySettings,
+      metrics: 'none',
       sites: [site({ compress: true, basicAuthUser: 'admin', basicAuthHash: hash, scheme: 'https', tlsInsecure: true })],
     });
     expect(out).toContain('encode zstd gzip');
@@ -73,7 +107,12 @@ describe('deploy helpers', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-'));
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ scripts: { build: 'tsc', start: 'node dist' } }));
     fs.writeFileSync(path.join(dir, 'pnpm-lock.yaml'), '');
-    expect(detectProject(dir)).toEqual({ pm: 'pnpm', install: 'pnpm install --frozen-lockfile', build: 'pnpm run build', start: 'pnpm start' });
+    expect(detectProject(dir)).toEqual({
+      pm: 'pnpm',
+      install: 'pnpm install --frozen-lockfile',
+      build: 'pnpm run build',
+      start: 'pnpm start',
+    });
     fs.rmSync(path.join(dir, 'pnpm-lock.yaml'));
     fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}');
     expect(detectProject(dir).install).toBe('npm ci');
@@ -154,7 +193,16 @@ describe('child process environment', () => {
   it('strips variables pm2 injects so child pm2 calls keep their own --name', async () => {
     const { childEnv } = await import('../src/server/lib/exec.js');
     const saved = { ...process.env };
-    Object.assign(process.env, { pm_id: '1', name: 'homeport', homeport: '{}', namespace: 'default', NODE_CHANNEL_FD: '3', PM2_HOME: '/x/.pm2', PM2_USAGE: 'CLI', KEEP_ME: 'yes' });
+    Object.assign(process.env, {
+      pm_id: '1',
+      name: 'homeport',
+      homeport: '{}',
+      namespace: 'default',
+      NODE_CHANNEL_FD: '3',
+      PM2_HOME: '/x/.pm2',
+      PM2_USAGE: 'CLI',
+      KEEP_ME: 'yes',
+    });
     try {
       const env = childEnv();
       for (const k of ['pm_id', 'name', 'homeport', 'namespace', 'NODE_CHANNEL_FD', 'PM2_USAGE']) expect(env[k]).toBeUndefined();
@@ -164,5 +212,12 @@ describe('child process environment', () => {
       for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
       Object.assign(process.env, saved);
     }
+  });
+});
+
+describe('log hygiene', () => {
+  it('strips terminal colour codes', async () => {
+    const { stripAnsi } = await import('../src/server/lib/exec.js');
+    expect(stripAnsi('\x1b[32m[PM2]\x1b[39m Applying action')).toBe('[PM2] Applying action');
   });
 });

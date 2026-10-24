@@ -4,7 +4,11 @@ import { IS_MAC } from '../config.js';
 import { run } from '../lib/exec.js';
 import { settings } from '../store.js';
 
-export interface HostMemory { total: number; available: number; used: number }
+export interface HostMemory {
+  total: number;
+  available: number;
+  used: number;
+}
 
 /**
  * Memory that is actually available to programs. `os.freemem()` is misleading on macOS
@@ -24,13 +28,19 @@ export async function hostMemory(): Promise<HostMemory> {
     try {
       const m = /MemAvailable:\s+(\d+) kB/.exec(fs.readFileSync('/proc/meminfo', 'utf8'));
       if (m) available = Number(m[1]) * 1024;
-    } catch { /* fall back to freemem */ }
+    } catch {
+      /* fall back to freemem */
+    }
   }
   available = Math.min(available, total);
   return { total, available, used: total - available };
 }
 
-export interface HostDisk { total: number; used: number; avail: number }
+export interface HostDisk {
+  total: number;
+  used: number;
+  avail: number;
+}
 
 export async function hostDisk(): Promise<HostDisk | null> {
   const dir = fs.existsSync(settings().appsDir) ? settings().appsDir : os.homedir();
@@ -45,12 +55,15 @@ let lastCpu: { idle: number; total: number } | null = null;
 
 /** CPU busy fraction (0-1) since the previous call. */
 export function hostCpuUsage(): number {
-  const now = os.cpus().reduce((acc, c) => {
-    const t = c.times;
-    acc.idle += t.idle;
-    acc.total += t.user + t.nice + t.sys + t.irq + t.idle;
-    return acc;
-  }, { idle: 0, total: 0 });
+  const now = os.cpus().reduce(
+    (acc, c) => {
+      const t = c.times;
+      acc.idle += t.idle;
+      acc.total += t.user + t.nice + t.sys + t.irq + t.idle;
+      return acc;
+    },
+    { idle: 0, total: 0 },
+  );
   const prev = lastCpu;
   lastCpu = now;
   if (!prev || now.total === prev.total) return 0;

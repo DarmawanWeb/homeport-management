@@ -1,103 +1,206 @@
+import { ArrowUpRight, BellRing } from 'lucide-react';
 import { useState } from 'react';
 import { Chart } from '../components/Chart';
 import { DeployLogDialog } from '../components/Logs';
-import { SetupBanners, type Page } from '../components/Layout';
-import { Bar, Empty, StatusTag, Tag, Toolbar } from '../components/ui';
-import { ago, fmtBytes, fmtDuration, fmtUptime, shortSha } from '../lib/format';
+import { RouteMap } from '../components/RouteMap';
+import { SetupNotices } from '../components/Shell';
+import { DeployBadge, Empty, Meter, PageHead, Panel, Segmented } from '../components/ui';
 import { useDialog } from '../lib/dialog';
+import { ago, fmtBytes, fmtPct, fmtRate, fmtUptime, shortSha } from '../lib/format';
 import { useMetric, useMonitoring, useSystem } from '../lib/queries';
 
-export const RANGES = [[3600, '1 jam'], [6 * 3600, '6 jam'], [86_400, '24 jam'], [7 * 86_400, '7 hari']] as const;
+export const RANGES = [
+  [3600, '1h'],
+  [6 * 3600, '6h'],
+  [86_400, '24h'],
+  [7 * 86_400, '7d'],
+] as const;
+export type RangeValue = (typeof RANGES)[number][0];
 
-export function RangePicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="seg">
-      {RANGES.map(([v, l]) => <button key={v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}
-    </div>
-  );
+export function RangePicker({ value, onChange }: { value: RangeValue; onChange: (v: RangeValue) => void }) {
+  return <Segmented label="Time range" value={value} options={RANGES} onChange={onChange} />;
 }
 
-export function MetricCard({ title, preset, range, app, format, height }: { title: string; preset: string; range: number; app?: string; format?: (v: number) => string; height?: number }) {
+export function MetricPanel({
+  title,
+  preset,
+  range,
+  app,
+  format,
+}: {
+  title: string;
+  preset: string;
+  range: number;
+  app?: string;
+  format?: (v: number) => string;
+}) {
   const { data } = useMetric(preset, range, app);
   return (
-    <div className="card section">
-      <h3>{title}</h3>
-      <Chart series={data?.series ?? []} format={format} height={height} empty={data && !data.available ? data.error ?? 'Monitoring belum aktif' : 'Belum ada data'} />
+    <Panel title={title}>
+      <Chart
+        series={data?.series ?? []}
+        format={format}
+        empty={data && !data.available ? (data.error ?? 'Monitoring is off') : 'No data in this range yet'}
+      />
+    </Panel>
+  );
+}
+
+export function Overview() {
+  const { data: s } = useSystem();
+  const { data: mon } = useMonitoring();
+  const { open } = useDialog();
+  const [range, setRange] = useState<RangeValue>(6 * 3600);
+  const firing = mon?.alerts.filter((a) => a.state === 'firing') ?? [];
+  const memUsed = s ? s.mem.total - s.mem.free : 0;
+
+  return (
+    <div className="page">
+      <PageHead
+        title="Overview"
+        description={
+          s
+            ? `How a request reaches your apps on ${s.hostname}, and how the machine is holding up. Up for ${fmtUptime(s.uptime)}.`
+            : 'Loading…'
+        }
+      />
+      <SetupNotices />
+      <div className="stack">
+        <Panel
+          title="Traffic route"
+          description="Left to right is the path every request takes. The first red light is where to look."
+          flush
+        >
+          <RouteMap />
+        </Panel>
+
+        {firing.length > 0 && (
+          <Panel
+            title="Needs attention"
+            actions={
+              <a className="btn sm" href="#/monitoring">
+                All alerts
+              </a>
+            }
+            flush
+          >
+            {firing.map((a) => (
+              <div key={a.name + JSON.stringify(a.labels)} className="alert-row">
+                <BellRing size={16} color={a.severity === 'critical' ? 'var(--port)' : 'var(--buoy)'} />
+                <div>
+                  <strong>{a.summary || a.name}</strong>
+                  <span className="sub">
+                    {a.name}, since {ago(a.activeAt)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </Panel>
+        )}
+
+        {s && (
+          <Panel title="This machine" description={`${s.platform}, Node ${s.node}`} flush>
+            <div className="gauges">
+              <div className="gauge">
+                <span className="gauge-label">CPU load</span>
+                <span className="gauge-value">
+                  {s.load[0]?.toFixed(2)}
+                  <small>of {s.cpus} cores</small>
+                </span>
+                <Meter value={(s.load[0] ?? 0) / s.cpus} />
+              </div>
+              <div className="gauge">
+                <span className="gauge-label">Memory in use</span>
+                <span className="gauge-value">
+                  {fmtBytes(memUsed)}
+                  <small>of {fmtBytes(s.mem.total)}</small>
+                </span>
+                <Meter value={memUsed / s.mem.total} />
+              </div>
+              <div className="gauge">
+                <span className="gauge-label">Disk free</span>
+                <span className="gauge-value">
+                  {fmtBytes(s.disk?.avail)}
+                  {s.disk && <small>of {fmtBytes(s.disk.total)}</small>}
+                </span>
+                {s.disk && <Meter value={s.disk.used / s.disk.total} />}
+              </div>
+              <div className="gauge">
+                <span className="gauge-label">Processes online</span>
+                <span className="gauge-value">
+                  {s.pm2.online}
+                  <small>
+                    of {s.pm2.total}, using {fmtBytes(s.pm2.mem)}
+                  </small>
+                </span>
+                <Meter value={s.pm2.total ? s.pm2.online / s.pm2.total : 0} />
+              </div>
+            </div>
+          </Panel>
+        )}
+
+        <div className="cols">
+          <Panel title="Recent deploys" flush>
+            {s?.recentDeploys.length ? (
+              <table className="table">
+                <tbody>
+                  {s.recentDeploys.map((d) => (
+                    <tr key={d.id} className="link" onClick={() => open(<DeployLogDialog id={d.id} />, { wide: true })}>
+                      <td>
+                        <span className="primary-cell">{d.app}</span>
+                        <span className="sub ellipsis" style={{ maxWidth: 260 }}>
+                          <span className="code">{shortSha(d.commit) || 'pending'}</span> {d.msg ?? d.pushMsg ?? ''}
+                          <span className="show-sm">, {ago(d.finishedAt ?? d.createdAt)}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <DeployBadge status={d.status} rolledBack={!!d.rolledBackTo} />
+                      </td>
+                      <td className="right muted nowrap hide-sm">{ago(d.finishedAt ?? d.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <Empty title="No deploys yet">Deploys appear here as soon as an app is created or a push arrives.</Empty>
+            )}
+          </Panel>
+
+          {mon?.enabled ? (
+            <Panel title="Requests per second" actions={<RangePicker value={range} onChange={setRange} />}>
+              <MetricChart preset="requests" range={range} format={fmtRate} />
+              <div style={{ height: 18 }} />
+              <h3 style={{ fontSize: 'var(--t-md)', marginBottom: 8 }}>CPU on this machine</h3>
+              <MetricChart preset="hostCpu" range={range} format={fmtPct} height={110} />
+            </Panel>
+          ) : (
+            <Panel title="Metrics">
+              <Empty
+                title="Monitoring is off"
+                action={
+                  <a className="btn primary" href="#/monitoring">
+                    Set up monitoring <ArrowUpRight />
+                  </a>
+                }
+              >
+                Turn it on for traffic per domain, latency, per-app CPU and memory, and alerts sent to Discord or Telegram.
+              </Empty>
+            </Panel>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-export const fmtPct = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)}%`;
-export const fmtReq = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(2));
-export const fmtSec = (v: number) => (v >= 1 ? `${v.toFixed(1)}s` : `${(v * 1000).toFixed(0)}ms`);
-
-export function Overview({ onNavigate }: { onNavigate: (p: Page) => void }) {
-  const { data: s, error } = useSystem();
-  const { data: mon } = useMonitoring();
-  const { open } = useDialog();
-  const [range, setRange] = useState(6 * 3600);
-  if (error) return <Empty>{error.message}</Empty>;
-  if (!s) return <Empty>Memuat…</Empty>;
-  const memUsed = s.mem.total - s.mem.free;
-  const firing = mon?.alerts.filter((a) => a.state === 'firing') ?? [];
-
+function MetricChart({ preset, range, format, height }: { preset: string; range: number; format: (v: number) => string; height?: number }) {
+  const { data } = useMetric(preset, range);
   return (
-    <>
-      <SetupBanners onNavigate={onNavigate} />
-      <div className="toolbar">
-        <h2>{s.hostname}</h2>
-        <span className="sub">{s.platform} · Node {s.node} · nyala {fmtUptime(s.uptime)}</span>
-      </div>
-
-      {firing.length > 0 && (
-        <div className="card alerts">
-          {firing.map((a) => (
-            <div key={a.name + JSON.stringify(a.labels)} className={`alert ${a.severity}`}>
-              <b>{a.name}</b> <span>{a.summary}</span> <span className="sub">sejak {ago(a.activeAt)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="tiles">
-        <div className="card tile"><div className="k">CPU load (1m)</div><div className="v">{s.load[0]?.toFixed(2)}</div><div className="sub">{s.cpus} core · {s.cpuModel}</div><Bar value={(s.load[0] ?? 0) / s.cpus} /></div>
-        <div className="card tile"><div className="k">Memori</div><div className="v">{fmtBytes(memUsed)}</div><div className="sub">dari {fmtBytes(s.mem.total)} · pm2 {fmtBytes(s.pm2.mem)}</div><Bar value={memUsed / s.mem.total} /></div>
-        <div className="card tile"><div className="k">Disk</div><div className="v">{fmtBytes(s.disk?.avail)}</div><div className="sub">tersisa{s.disk ? ` dari ${fmtBytes(s.disk.total)}` : ''}</div>{s.disk && <Bar value={s.disk.used / s.disk.total} />}</div>
-        <div className="card tile"><div className="k">Proses</div><div className="v">{s.pm2.online}<span className="sub" style={{ fontSize: 14 }}> / {s.pm2.total} online</span></div><div className="sub">{s.counts.apps} app · {s.counts.sites} domain</div></div>
-      </div>
-
-      {mon?.enabled ? (
-        <>
-          <div className="toolbar spaced"><h2>Metrics</h2><RangePicker value={range} onChange={setRange} /></div>
-          <div className="grid2">
-            <MetricCard title="CPU Mac mini" preset="hostCpu" range={range} format={fmtPct} />
-            <MetricCard title="Request / detik per domain" preset="requests" range={range} format={fmtReq} />
-            <MetricCard title="Memori per app" preset="appMem" range={range} format={fmtBytes} />
-            <MetricCard title="CPU per app" preset="appCpu" range={range} format={fmtPct} />
-          </div>
-        </>
-      ) : (
-        <div className="card section hint-card">
-          <b>Aktifkan monitoring</b> untuk grafik CPU, memori, traffic per domain dan alert otomatis (Prometheus + Grafana).
-          <button className="btn sm primary" onClick={() => onNavigate('monitoring')}>Buka Monitoring</button>
-        </div>
-      )}
-
-      <div className="toolbar spaced"><h2>Deploy terakhir</h2></div>
-      <div className="card">
-        {s.recentDeploys.length ? (
-          <table><tbody>
-            {s.recentDeploys.map((d) => (
-              <tr key={d.id} className="clickable" onClick={() => open(<DeployLogDialog id={d.id} />, { wide: true })}>
-                <td><div className="host">{d.app}</div><div className="sub">{d.trigger}{d.pushedBy ? ` · ${d.pushedBy}` : ''}</div></td>
-                <td className="hide-sm"><span className="mono">{shortSha(d.commit)}</span> <span className="sub">{d.msg ?? d.pushMsg ?? ''}</span></td>
-                <td><StatusTag status={d.status} />{d.rolledBackTo && <> <Tag tone="warn">rollback</Tag></>}</td>
-                <td className="sub right">{ago(d.finishedAt ?? d.createdAt)}<br />{fmtDuration(d.duration)}</td>
-              </tr>
-            ))}
-          </tbody></table>
-        ) : <Empty>Belum ada deploy</Empty>}
-      </div>
-    </>
+    <Chart
+      series={data?.series ?? []}
+      format={format}
+      height={height}
+      empty={data && !data.available ? (data.error ?? 'No data') : 'No data in this range yet'}
+    />
   );
 }

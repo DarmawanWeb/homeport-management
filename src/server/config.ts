@@ -36,8 +36,14 @@ export function extendPath(): void {
 }
 
 export const RESERVED_PORTS = (s: Settings): number[] => [
-  env.port, s.caddyHttpPort, s.webhookPort, 2019,
-  s.monitoring.prometheusPort, s.monitoring.grafanaPort, s.monitoring.nodeExporterPort, s.monitoring.metricsPort,
+  env.port,
+  s.caddyHttpPort,
+  s.webhookPort,
+  2019,
+  s.monitoring.prometheusPort,
+  s.monitoring.grafanaPort,
+  s.monitoring.nodeExporterPort,
+  s.monitoring.metricsPort,
   ...Object.values(s.tunnelMetricsPorts),
 ];
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import { DATA_DIR, defaultSettings, paths } from './config.js';
 import type { DbShape, Settings } from '../shared/types.js';
+import { DATA_DIR, defaultSettings, paths } from './config.js';
 
 const SCHEMA_VERSION = 3;
 
@@ -40,7 +40,7 @@ export function loadDb(): void {
   } catch (e) {
     const backup = `${paths.db}.corrupt-${Date.now()}`;
     fs.copyFileSync(paths.db, backup);
-    console.error(`db.json tidak bisa dibaca (${(e as Error).message}); disalin ke ${backup}, memakai default`);
+    console.error(`db.json could not be read (${(e as Error).message}); copied to ${backup}, starting with defaults`);
   }
 }
 
@@ -60,7 +60,7 @@ export function saveDb(): Promise<void> {
     })
     .catch((e: Error) => {
       pending = false;
-      console.error('Gagal menyimpan db:', e.message);
+      console.error('Could not save db:', e.message);
     });
   return chain;
 }

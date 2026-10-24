@@ -1,14 +1,15 @@
+import { Cable, Plus, RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { SetupBanners, type Page } from '../components/Layout';
+import type { TunnelView } from '../../../src/shared/types';
 import { Pm2LogsDialog } from '../components/Logs';
-import { Banner, Button, CancelButton, Check, Confirm, Empty, Field, Modal, SubmitButton, Tag, Toolbar } from '../components/ui';
+import { SetupNotices } from '../components/Shell';
+import { Badge, Button, Empty, Field, Light, Loading, Modal, Notice, PageHead, Panel, Switch } from '../components/ui';
 import { del, get, post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { useAppState, useRefresh, useTunnels } from '../lib/queries';
 import { useReport, useToast } from '../lib/toast';
-import type { TunnelView } from '../../../src/shared/types';
 
-export function Tunnels({ onNavigate }: { onNavigate: (p: Page) => void }) {
+export function Tunnels() {
   const { data, error, isLoading } = useTunnels();
   const { data: state } = useAppState();
   const { open } = useDialog();
@@ -16,53 +17,142 @@ export function Tunnels({ onNavigate }: { onNavigate: (p: Page) => void }) {
   const refresh = useRefresh();
   const prefix = state?.settings.tunnelPm2Prefix ?? 'hp-cf-';
 
-  const act = async (t: TunnelView, action: string) => {
+  const reload = async () => {
+    await get('/api/tunnels?refresh=1');
+    await refresh('tunnels');
+  };
+  const act = async (t: TunnelView, action: string, done: string) => {
     await post(`/api/tunnels/${encodeURIComponent(t.name)}/${action}`);
-    toast(`${t.name}: ${action} OK`, 'ok');
+    toast(done, 'ok');
     await refresh('tunnels', 'state', 'status');
-    if (action === 'start' || action === 'restart') setTimeout(() => void get('/api/tunnels?refresh=1').then(() => refresh('tunnels')), 4000);
+    // Edge connections take a few seconds to register with Cloudflare.
+    if (action === 'start' || action === 'restart') setTimeout(() => void reload(), 4000);
   };
 
   return (
-    <>
-      <SetupBanners onNavigate={onNavigate} />
-      <Toolbar title="Cloudflare Tunnels">
-        <Button onClick={async () => { await get('/api/tunnels?refresh=1'); await refresh('tunnels'); }}>⟳ Refresh</Button>
-        <Button variant="primary" onClick={() => open(<CreateTunnel />)}>+ Buat tunnel</Button>
-      </Toolbar>
-      {error && <Banner>{error.message}</Banner>}
-      <div className="card">
-        {isLoading ? <Empty>Memuat…</Empty> : data?.tunnels.length ? (
-          <table>
-            <thead><tr><th>Tunnel</th><th>Status</th><th className="hide-sm">Domain</th><th /></tr></thead>
-            <tbody>{data.tunnels.map((t) => {
-              const running = t.pm2?.status === 'online';
-              return (
-                <tr key={t.id}>
-                  <td><div className="host">{t.name} {state?.settings.defaultTunnel === t.name && <Tag tone="acc">default</Tag>}</div><div className="sub mono">{t.id}</div></td>
-                  <td>
-                    {t.connections ? <Tag tone="ok">{t.connections} koneksi edge</Tag> : <Tag>0 koneksi</Tag>}
-                    <div className="sub">pm2: {t.pm2?.status ?? 'tidak jalan'}{t.metricsPort ? ` · metrics :${t.metricsPort}` : ''}</div>
-                    {!t.credentials && <Tag tone="err">kredensial tidak ada di Mac ini</Tag>}
-                  </td>
-                  <td className="hide-sm">{t.sites.length ? t.sites.map((h) => <div key={h} className="sub">{h}</div>) : <span className="sub">—</span>}</td>
-                  <td><div className="actions">
-                    {running
-                      ? <><Button size="sm" onClick={() => act(t, 'restart')}>Restart</Button><Button size="sm" onClick={() => act(t, 'stop')}>Stop</Button></>
-                      : <Button size="sm" variant="primary" disabled={!t.credentials} onClick={() => act(t, 'start')}>Start</Button>}
-                    <Button size="sm" onClick={() => open(<TunnelConfig name={t.name} />, { wide: true })}>Config</Button>
-                    <Button size="sm" onClick={() => open(<Pm2LogsDialog name={prefix + t.name} />, { wide: true })}>Logs</Button>
-                    {state?.settings.defaultTunnel !== t.name && <Button size="sm" onClick={() => act(t, 'default')}>Jadikan default</Button>}
-                    <Button size="sm" variant="danger" onClick={() => open(<DeleteTunnel tunnel={t} />)}>Hapus</Button>
-                  </div></td>
-                </tr>
-              );
-            })}</tbody>
+    <div className="page">
+      <PageHead
+        title="Tunnels"
+        description="An outbound connection from this machine to Cloudflare, so nothing has to be opened on your router. One tunnel carries every domain."
+        actions={
+          <>
+            <Button icon={<RotateCw />} onClick={reload}>
+              Refresh
+            </Button>
+            <Button variant="primary" icon={<Plus />} onClick={() => open(<CreateTunnel />)}>
+              Create tunnel
+            </Button>
+          </>
+        }
+      />
+      <SetupNotices />
+      {error && (
+        <div className="notices">
+          <Notice tone="err">{error.message}</Notice>
+        </div>
+      )}
+      <Panel flush>
+        {isLoading ? (
+          <Loading />
+        ) : data?.tunnels.length ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Tunnel</th>
+                <th>Connection</th>
+                <th className="hide-sm">Carries</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {data.tunnels.map((t) => {
+                const running = t.pm2?.status === 'online';
+                return (
+                  <tr key={t.id}>
+                    <td className="primary-cell">
+                      {t.name} {state?.settings.defaultTunnel === t.name && <Badge tone="sea">Default</Badge>}
+                      <span className="sub code">{t.id}</span>
+                    </td>
+                    <td>
+                      <span className="btn-row" style={{ gap: 8 }}>
+                        <Light tone={!running ? 'err' : t.connections ? 'ok' : 'warn'} />
+                        {!running ? 'Stopped' : t.connections ? `${t.connections} edge connections` : 'Connecting'}
+                      </span>
+                      {!t.credentials && (
+                        <span className="sub" style={{ color: 'var(--port)' }}>
+                          Credentials are on another machine
+                        </span>
+                      )}
+                    </td>
+                    <td className="hide-sm">
+                      {t.sites.length ? (
+                        <span>
+                          {t.sites.length} domain{t.sites.length === 1 ? '' : 's'}
+                          <span className="sub ellipsis" style={{ maxWidth: 260 }}>
+                            {t.sites.join(', ')}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="muted">No domains</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {running ? (
+                          <>
+                            <Button size="sm" onClick={() => act(t, 'restart', `${t.name} restarted`)}>
+                              Restart
+                            </Button>
+                            <Button size="sm" onClick={() => act(t, 'stop', `${t.name} stopped`)}>
+                              Stop
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={!t.credentials}
+                            onClick={() => act(t, 'start', `${t.name} started`)}
+                          >
+                            Start
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => open(<TunnelConfig name={t.name} />, { wide: true })}>
+                          Routes
+                        </Button>
+                        <Button size="sm" onClick={() => open(<Pm2LogsDialog name={prefix + t.name} />, { wide: true })}>
+                          Logs
+                        </Button>
+                        {state?.settings.defaultTunnel !== t.name && (
+                          <Button size="sm" onClick={() => act(t, 'default', `${t.name} is now the default`)}>
+                            Make default
+                          </Button>
+                        )}
+                        <Button size="sm" variant="danger" onClick={() => open(<DeleteTunnel tunnel={t} />)}>
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
-        ) : <Empty>Belum ada tunnel. Biasanya cukup <b>1 tunnel</b> untuk semua domain di Mac ini.</Empty>}
-      </div>
-      <p className="hint">Tunnel dijalankan via pm2 sebagai <code>{prefix}&lt;nama&gt;</code>, dengan endpoint metrics untuk Prometheus. Ingress dibuat otomatis dari daftar Domains.</p>
-    </>
+        ) : (
+          <Empty
+            icon={<Cable />}
+            title="No tunnels yet"
+            action={
+              <Button variant="primary" icon={<Plus />} onClick={() => open(<CreateTunnel />)}>
+                Create a tunnel
+              </Button>
+            }
+          >
+            Name it after this machine. Homeport runs it under pm2 and rewrites its routes whenever a domain changes.
+          </Empty>
+        )}
+      </Panel>
+    </div>
   );
 }
 
@@ -73,20 +163,45 @@ function CreateTunnel() {
   const toast = useToast();
   const refresh = useRefresh();
   return (
-    <Modal title="Buat tunnel" onSubmit={async () => {
-      const r = await post<{ started: boolean }>('/api/tunnels', { name, start });
-      close(); toast(`Tunnel dibuat${r.started ? ' & dijalankan' : ''}`, 'ok'); await refresh();
-    }} footer={<><CancelButton /><SubmitButton>Buat</SubmitButton></>}>
-      <Field label="Nama tunnel"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="macmini" pattern="[A-Za-z0-9_\-]+" required autoFocus /></Field>
-      <Check checked={start} onChange={setStart}>Langsung jalankan via pm2</Check>
+    <Modal
+      title="Create a tunnel"
+      submitLabel="Create tunnel"
+      onSubmit={async () => {
+        const r = await post<{ started: boolean }>('/api/tunnels', { name, start });
+        close();
+        toast(r.started ? `${name} created and started` : `${name} created`, 'ok');
+        await refresh();
+      }}
+    >
+      <div className="form">
+        <Field label="Name" hint="Letters, digits, dashes and underscores.">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="mac-mini" pattern="[A-Za-z0-9_\-]+" required />
+        </Field>
+        <Switch checked={start} onChange={setStart}>
+          Start it right away
+        </Switch>
+      </div>
     </Modal>
   );
 }
 
 function TunnelConfig({ name }: { name: string }) {
   const [r, setR] = useState<{ text: string; file: string } | null>(null);
-  useEffect(() => { void get<{ text: string; file: string }>(`/api/tunnels/${encodeURIComponent(name)}/config`).then(setR); }, [name]);
-  return <Modal title={`Config ${name}`}>{r ? <><div className="sub mono mb">{r.file}</div><pre className="box">{r.text}</pre></> : <Empty>Memuat…</Empty>}</Modal>;
+  useEffect(() => {
+    void get<{ text: string; file: string }>(`/api/tunnels/${encodeURIComponent(name)}/config`).then(setR);
+  }, [name]);
+  return (
+    <Modal title={`Routes for ${name}`}>
+      {r ? (
+        <div className="stack" style={{ gap: 10 }}>
+          <span className="muted code">{r.file}</span>
+          <pre className="terminal">{r.text}</pre>
+        </div>
+      ) : (
+        <Loading />
+      )}
+    </Modal>
+  );
 }
 
 function DeleteTunnel({ tunnel: t }: { tunnel: TunnelView }) {
@@ -96,13 +211,28 @@ function DeleteTunnel({ tunnel: t }: { tunnel: TunnelView }) {
   const report = useReport();
   const refresh = useRefresh();
   return (
-    <Confirm title="Hapus tunnel" confirmLabel="Hapus tunnel" onConfirm={async () => {
-      const r = await del(`/api/tunnels/${encodeURIComponent(t.name)}?dns=${dns ? 1 : 0}`);
-      close(); report(r); await refresh();
-    }}>
-      <p>Hapus tunnel <b>{t.name}</b> dari Cloudflare? Proses pm2-nya ikut dihentikan.</p>
-      {t.sites.length > 0 && <p className="hint">{t.sites.length} domain memakai tunnel ini dan akan dilepas (domain tetap ada, tinggal pilih tunnel lain).</p>}
-      {state?.settings.cfApiTokenSet && t.sites.length > 0 && <Check checked={dns} onChange={setDns}>Hapus juga CNAME DNS milik domain tersebut</Check>}
-    </Confirm>
+    <Modal
+      title={`Delete ${t.name}?`}
+      danger
+      submitLabel="Delete tunnel"
+      onSubmit={async () => {
+        const r = await del(`/api/tunnels/${encodeURIComponent(t.name)}?dns=${dns ? 1 : 0}`);
+        close();
+        report(r);
+        await refresh();
+      }}
+    >
+      <div className="form">
+        <p>The tunnel is deleted on Cloudflare and its process stops. This cannot be undone.</p>
+        {t.sites.length > 0 && (
+          <p className="hint">{t.sites.length} domains use it. They stay in the list without a tunnel until you assign another.</p>
+        )}
+        {state?.settings.cfApiTokenSet && t.sites.length > 0 && (
+          <Switch checked={dns} onChange={setDns}>
+            Also delete their DNS records
+          </Switch>
+        )}
+      </div>
+    </Modal>
   );
 }

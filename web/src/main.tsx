@@ -1,10 +1,21 @@
+import '@fontsource/barlow/400.css';
+import '@fontsource/barlow/500.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/barlow-semi-condensed/600.css';
+import '@fontsource/jetbrains-mono/400.css';
+import './styles/tokens.css';
+import './styles/app.css';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Layout, PAGES, type Page } from './components/Layout';
+import { CommandPalette } from './components/CommandPalette';
+import { Shell } from './components/Shell';
 import { UNAUTHORIZED_EVENT } from './lib/api';
 import { DialogProvider } from './lib/dialog';
+import { useRoute } from './lib/router';
 import { ToastProvider } from './lib/toast';
+import { AppDetail } from './pages/AppDetail';
 import { Apps } from './pages/Apps';
 import { Domains } from './pages/Domains';
 import { Activity, Caddyfile, Login } from './pages/Misc';
@@ -13,45 +24,73 @@ import { Overview } from './pages/Overview';
 import { Services } from './pages/Services';
 import { Settings } from './pages/Settings';
 import { Tunnels } from './pages/Tunnels';
-import './styles.css';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 2000, refetchOnWindowFocus: true, retry: 1 } },
 });
 
-const pageFromHash = (): Page => {
-  const h = location.hash.replace(/^#\/?/, '');
-  return (PAGES.find(([k]) => k === h)?.[0] ?? 'apps') as Page;
+const TITLES: Record<string, string> = {
+  overview: 'Overview',
+  apps: 'Apps',
+  domains: 'Domains',
+  tunnels: 'Tunnels',
+  services: 'Services',
+  monitoring: 'Monitoring',
+  caddyfile: 'Caddyfile',
+  activity: 'Activity log',
+  settings: 'Settings',
 };
 
 function App() {
-  const [page, setPage] = useState<Page>(pageFromHash);
+  const route = useRoute();
   const [needLogin, setNeedLogin] = useState(false);
+  const [palette, setPalette] = useState(false);
 
   useEffect(() => {
-    const onHash = () => setPage(pageFromHash());
     const onUnauthorized = () => setNeedLogin(true);
-    window.addEventListener('hashchange', onHash);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPalette((p) => !p);
+      }
+    };
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
-    return () => { window.removeEventListener('hashchange', onHash); window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+      window.removeEventListener('keydown', onKey);
+    };
   }, []);
 
-  const navigate = (p: Page) => { location.hash = `/${p}`; };
+  useEffect(() => {
+    document.title = `${route.page === 'app' ? route.id : TITLES[route.page]} · Homeport`;
+  }, [route]);
 
-  if (needLogin) return <Login onDone={() => { setNeedLogin(false); void queryClient.invalidateQueries(); }} />;
+  if (needLogin)
+    return (
+      <Login
+        onDone={() => {
+          setNeedLogin(false);
+          void queryClient.invalidateQueries();
+        }}
+      />
+    );
 
-  const views: Record<Page, React.ReactNode> = {
-    overview: <Overview onNavigate={navigate} />,
-    apps: <Apps onNavigate={navigate} />,
-    domains: <Domains onNavigate={navigate} />,
-    tunnels: <Tunnels onNavigate={navigate} />,
-    services: <Services onNavigate={navigate} />,
-    monitoring: <Monitoring />,
-    caddyfile: <Caddyfile />,
-    activity: <Activity />,
-    settings: <Settings />,
-  };
-  return <Layout page={page} onNavigate={navigate}>{views[page]}</Layout>;
+  return (
+    <Shell route={route} onSearch={() => setPalette(true)}>
+      {route.page === 'overview' && <Overview />}
+      {route.page === 'apps' && <Apps />}
+      {route.page === 'app' && <AppDetail id={route.id} tab={route.tab} />}
+      {route.page === 'domains' && <Domains />}
+      {route.page === 'tunnels' && <Tunnels />}
+      {route.page === 'services' && <Services />}
+      {route.page === 'monitoring' && <Monitoring />}
+      {route.page === 'caddyfile' && <Caddyfile />}
+      {route.page === 'activity' && <Activity />}
+      {route.page === 'settings' && <Settings />}
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
+    </Shell>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(

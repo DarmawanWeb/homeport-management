@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Biome
+        run: npx biome ci .
+      - name: Type check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Shell scripts
+        run: bash -n setup-mac.sh && bash -n reset-mac.sh
+
+  monitoring:
+    name: Prometheus config and queries
+    runs-on: ubuntu-latest
+    env:
+      PROMETHEUS_VERSION: 3.5.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Prometheus
+        run: |
+          curl -sSL "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz" | tar xz
+          echo "$PWD/prometheus-${PROMETHEUS_VERSION}.linux-amd64" >> "$GITHUB_PATH"
+      - name: Generate and validate config
+        run: |
+          npm run check:monitoring
+          promtool check config .tmp/monitoring/prometheus.yml
+      - name: Validate every PromQL expression
+        run: |
+          printf 'global:\n  scrape_interval: 15s\n' > /tmp/empty.yml
+          prometheus --config.file=/tmp/empty.yml --storage.tsdb.path=/tmp/tsdb --web.listen-address=127.0.0.1:9090 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9090/-/ready && break; sleep 1; done
+          PROM_URL=http://127.0.0.1:9090 npx tsx scripts/check-monitoring.ts .tmp/monitoring
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Diagrams are up to date
+        run: |
+          npm run diagrams
+          git diff --exit-code docs/public/diagrams || (echo "::error::Run npm run diagrams and commit the result" && exit 1)
+      - run: npm run docs:build

@@ -1,46 +1,70 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
 
-export type ToastType = 'info' | 'ok' | 'warn' | 'err';
-interface Toast { id: number; msg: string; type: ToastType }
+export type Tone = 'info' | 'ok' | 'warn' | 'err';
+interface Toast {
+  id: number;
+  msg: string;
+  tone: Tone;
+}
 
-const Ctx = createContext<(msg: string, type?: ToastType, ms?: number) => void>(() => {});
+const ToastContext = createContext<(msg: string, tone?: Tone, ms?: number) => void>(() => {});
 let seq = 0;
+
+const LIGHT: Record<Tone, string> = { info: '', ok: 'ok', warn: 'warn', err: 'err' };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
-  const toast = useCallback((msg: string, type: ToastType = 'info', ms?: number) => {
-    const id = ++seq;
-    setItems((xs) => [...xs, { id, msg, type }]);
-    setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), ms ?? (type === 'err' ? 10_000 : 4500));
-  }, []);
+  const dismiss = useCallback((id: number) => setItems((xs) => xs.filter((x) => x.id !== id)), []);
+  const toast = useCallback(
+    (msg: string, tone: Tone = 'info', ms?: number) => {
+      const id = ++seq;
+      setItems((xs) => [...xs.slice(-4), { id, msg, tone }]);
+      setTimeout(() => dismiss(id), ms ?? (tone === 'err' ? 10_000 : 4500));
+    },
+    [dismiss],
+  );
   return (
-    <Ctx.Provider value={toast}>
+    <ToastContext.Provider value={toast}>
       {children}
-      <div className="toasts" role="status">
+      <div className="toasts" aria-live="polite">
         {items.map((t) => (
-          <div key={t.id} className={`toast ${t.type}`} onClick={() => setItems((xs) => xs.filter((x) => x.id !== t.id))}>{t.msg}</div>
+          <button type="button" key={t.id} className="toast" onClick={() => dismiss(t.id)}>
+            <span className={`light ${LIGHT[t.tone]}`} />
+            <span>{t.msg}</span>
+          </button>
         ))}
       </div>
-    </Ctx.Provider>
+    </ToastContext.Provider>
   );
 }
 
-export const useToast = () => useContext(Ctx);
+export const useToast = () => useContext(ToastContext);
 
-/** Show the outcome of a mutation that may carry steps, a warning and an apply result. */
+interface MutationOutcome {
+  steps?: string[];
+  warning?: string;
+  apply?: {
+    caddy?: { reloaded?: boolean; reason?: string };
+    tunnels?: { name: string; error?: string; restarted?: boolean }[];
+  };
+}
+
+/** Surface everything a config mutation reports: extra steps, warnings, apply problems. */
 export function useReport() {
   const toast = useToast();
-  return useCallback((r: unknown, okMsg?: string) => {
-    const res = (r ?? {}) as {
-      steps?: string[]; warning?: string;
-      apply?: { caddy?: { reloaded?: boolean; reason?: string }; tunnels?: { name: string; error?: string; restarted?: boolean }[] };
-    };
-    if (okMsg) toast(okMsg, 'ok');
-    res.steps?.forEach((s) => toast(s));
-    if (res.warning) toast(`⚠ ${res.warning}`, 'warn', 9000);
-    const a = res.apply;
-    if (a?.caddy && !a.caddy.reloaded && a.caddy.reason) toast(`${a.caddy.reason} — start Caddy di tab Services`, 'warn');
-    a?.tunnels?.filter((t) => t.error).forEach((t) => toast(`Tunnel ${t.name}: ${t.error}`, 'warn'));
-    a?.tunnels?.filter((t) => t.restarted).forEach((t) => toast(`Tunnel ${t.name} di-restart`));
-  }, [toast]);
+  return useCallback(
+    (r: unknown, okMsg?: string) => {
+      const res = (r ?? {}) as MutationOutcome;
+      if (okMsg) toast(okMsg, 'ok');
+      for (const s of res.steps ?? []) toast(s);
+      if (res.warning) toast(res.warning, 'warn', 9000);
+      const a = res.apply;
+      if (a?.caddy && !a.caddy.reloaded && a.caddy.reason) toast(`${a.caddy.reason}. Start Caddy from Services.`, 'warn');
+      for (const t of a?.tunnels ?? []) {
+        if (t.error) toast(`Tunnel ${t.name}: ${t.error}`, 'warn');
+        else if (t.restarted) toast(`Tunnel ${t.name} restarted with the new routes`);
+      }
+    },
+    [toast],
+  );
 }

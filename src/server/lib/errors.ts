@@ -1,7 +1,10 @@
 import type { z } from 'zod';
 
 export class HttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -15,7 +18,7 @@ export function parse<T extends z.ZodType>(schema: T, input: unknown): z.infer<T
   if (r.success) return r.data;
   const issue = r.error.issues[0];
   const where = issue?.path.length ? `${issue.path.join('.')}: ` : '';
-  throw badRequest(where + (issue?.message ?? 'input tidak valid'));
+  throw badRequest(where + (issue?.message ?? 'Invalid input'));
 }
 
 export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));

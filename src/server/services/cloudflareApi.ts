@@ -1,14 +1,27 @@
-import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { activity } from '../lib/activity.js';
+import { badRequest, HttpError, notFound } from '../lib/errors.js';
 import { settings } from '../store.js';
 
-interface CfResponse<T> { success: boolean; errors?: { message: string }[]; result: T; result_info?: { total_pages?: number } }
-interface Zone { id: string; name: string }
-interface DnsRecord { id: string; type: string; name: string; content: string }
+interface CfResponse<T> {
+  success: boolean;
+  errors?: { message: string }[];
+  result: T;
+  result_info?: { total_pages?: number };
+}
+interface Zone {
+  id: string;
+  name: string;
+}
+interface DnsRecord {
+  id: string;
+  type: string;
+  name: string;
+  content: string;
+}
 
 async function cf<T>(method: string, path: string): Promise<CfResponse<T>> {
   const token = settings().cfApiToken;
-  if (!token) throw badRequest('Cloudflare API token belum diisi di Settings');
+  if (!token) throw badRequest('Add a Cloudflare API token in Settings first');
   const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -34,10 +47,10 @@ export async function deleteTunnelCname(hostname: string): Promise<number> {
   const zone = (await listZones())
     .filter((z) => hostname === z.name || hostname.endsWith(`.${z.name}`))
     .sort((a, b) => b.name.length - a.name.length)[0];
-  if (!zone) throw notFound(`Zone untuk ${hostname} tidak ditemukan pada token ini`);
+  if (!zone) throw notFound(`No zone for ${hostname} is visible to this token`);
   const recs = await cf<DnsRecord[]>('GET', `/zones/${zone.id}/dns_records?name=${encodeURIComponent(hostname)}`);
   const targets = recs.result.filter((r) => r.type === 'CNAME' && r.content.endsWith('.cfargotunnel.com'));
   for (const r of targets) await cf('DELETE', `/zones/${zone.id}/dns_records/${r.id}`);
-  activity.info(`DNS ${hostname}: ${targets.length} record CNAME tunnel dihapus`);
+  activity.info(`DNS ${hostname}: deleted ${targets.length} tunnel CNAME record(s)`);
   return targets.length;
 }

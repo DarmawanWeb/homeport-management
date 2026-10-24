@@ -8,16 +8,16 @@ import client from 'prom-client';
 import { activity } from '../lib/activity.js';
 import { events } from '../lib/events.js';
 import { portOpen } from '../lib/net.js';
-import { db, settings } from '../store.js';
-import * as pm2 from '../services/pm2.js';
+import { restartExpected } from '../lib/restarts.js';
 import { isDeploying } from '../services/deploy.js';
+import * as pm2 from '../services/pm2.js';
+import { db, settings } from '../store.js';
 import { hostCpuUsage, hostDisk, hostMemory } from './host.js';
 
 export const registry = new client.Registry();
 client.collectDefaultMetrics({ register: registry, prefix: 'homeport_self_' });
 
-const g = (name: string, help: string, labelNames: string[] = []) =>
-  new client.Gauge({ name, help, labelNames, registers: [registry] });
+const g = (name: string, help: string, labelNames: string[] = []) => new client.Gauge({ name, help, labelNames, registers: [registry] });
 
 const m = {
   info: g('homeport_info', 'Homeport build/host info', ['hostname', 'platform']),
@@ -43,12 +43,33 @@ const m = {
   hostDiskAvail: g('homeport_host_disk_available_bytes', 'Free space on the volume holding the apps folder'),
 };
 
-const deploys = new client.Counter({ name: 'homeport_deploys_total', help: 'Finished deploys', labelNames: ['app', 'status', 'trigger'], registers: [registry] });
-const deployDuration = new client.Histogram({
-  name: 'homeport_deploy_duration_seconds', help: 'Deploy duration', labelNames: ['app'],
-  buckets: [5, 15, 30, 60, 120, 300, 600, 1200], registers: [registry],
+const deploys = new client.Counter({
+  name: 'homeport_deploys_total',
+  help: 'Finished deploys',
+  labelNames: ['app', 'status', 'trigger'],
+  registers: [registry],
 });
-const webhooks = new client.Counter({ name: 'homeport_webhooks_total', help: 'Webhook requests', labelNames: ['app', 'result'], registers: [registry] });
+const deployDuration = new client.Histogram({
+  name: 'homeport_deploy_duration_seconds',
+  help: 'Deploy duration',
+  labelNames: ['app'],
+  buckets: [5, 15, 30, 60, 120, 300, 600, 1200],
+  registers: [registry],
+});
+const crashes = new client.Counter({
+  name: 'homeport_app_crashes_total',
+  help: 'Unplanned restarts of an app: pm2 restarts that did not come from a deploy or a manual action',
+  labelNames: ['app'],
+  registers: [registry],
+});
+const lastRestarts = new Map<string, number>();
+
+const webhooks = new client.Counter({
+  name: 'homeport_webhooks_total',
+  help: 'Webhook requests',
+  labelNames: ['app', 'result'],
+  registers: [registry],
+});
 
 events.on('deploy:finished', (d) => {
   deploys.inc({ app: d.app, status: d.status, trigger: d.trigger });
@@ -77,25 +98,34 @@ async function refresh(): Promise<void> {
     m.procCpu.set(labels, p.cpu);
     m.procMem.set(labels, p.mem);
     m.procRestarts.set(labels, p.restarts);
+    if (labels.kind === 'app') {
+      const prev = lastRestarts.get(p.name);
+      if (prev !== undefined && p.restarts > prev && !restartExpected(p.name)) crashes.inc({ app: p.name }, p.restarts - prev);
+      lastRestarts.set(p.name, p.restarts);
+    }
     if (p.uptime && p.status === 'online') m.procUptime.set(labels, (Date.now() - p.uptime) / 1000);
   }
 
-  await Promise.all(db.apps.map(async (a) => {
-    const online = byName.get(a.name)?.status === 'online';
-    const listening = online && (await portOpen('127.0.0.1', a.port, 400));
-    m.appUp.set({ app: a.name }, listening ? 1 : 0);
-    m.appDeploying.set({ app: a.name }, isDeploying(a.id) ? 1 : 0);
-    if (a.currentCommit) m.appInfo.set({ app: a.name, branch: a.branch, commit: a.currentCommit.sha.slice(0, 7) }, 1);
-    if (a.lastDeploy) {
-      m.lastDeployTs.set({ app: a.name }, Date.parse(a.lastDeploy.at) / 1000);
-      m.lastDeployOk.set({ app: a.name }, a.lastDeploy.status === 'success' ? 1 : 0);
-    }
-  }));
+  await Promise.all(
+    db.apps.map(async (a) => {
+      const online = byName.get(a.name)?.status === 'online';
+      const listening = online && (await portOpen('127.0.0.1', a.port, 400));
+      m.appUp.set({ app: a.name }, listening ? 1 : 0);
+      m.appDeploying.set({ app: a.name }, isDeploying(a.id) ? 1 : 0);
+      if (a.currentCommit) m.appInfo.set({ app: a.name, branch: a.branch, commit: a.currentCommit.sha.slice(0, 7) }, 1);
+      if (a.lastDeploy) {
+        m.lastDeployTs.set({ app: a.name }, Date.parse(a.lastDeploy.at) / 1000);
+        m.lastDeployOk.set({ app: a.name }, a.lastDeploy.status === 'success' ? 1 : 0);
+      }
+    }),
+  );
 
-  await Promise.all(db.sites.map(async (s) => {
-    m.siteEnabled.set({ host: s.hostname }, s.enabled ? 1 : 0);
-    if (s.enabled) m.siteUp.set({ host: s.hostname, app: s.pm2Name }, (await portOpen(s.upstreamHost, s.upstreamPort, 400)) ? 1 : 0);
-  }));
+  await Promise.all(
+    db.sites.map(async (s) => {
+      m.siteEnabled.set({ host: s.hostname }, s.enabled ? 1 : 0);
+      if (s.enabled) m.siteUp.set({ host: s.hostname, app: s.pm2Name }, (await portOpen(s.upstreamHost, s.upstreamPort, 400)) ? 1 : 0);
+    }),
+  );
 
   for (const name of new Set(db.sites.map((s) => s.tunnel).filter(Boolean))) {
     m.tunnelRunning.set({ tunnel: name }, byName.get(st.tunnelPm2Prefix + name)?.status === 'online' ? 1 : 0);
@@ -121,12 +151,20 @@ export function startExporter(): void {
   server?.close();
   const port = settings().monitoring.metricsPort;
   server = http.createServer((req, res) => {
-    if (req.url !== '/metrics') { res.writeHead(404).end(); return; }
+    if (req.url !== '/metrics') {
+      res.writeHead(404).end();
+      return;
+    }
     refresh()
       .then(() => registry.metrics())
-      .then((body) => { res.writeHead(200, { 'Content-Type': registry.contentType }); res.end(body); })
-      .catch((e: Error) => { res.writeHead(500).end(e.message); });
+      .then((body) => {
+        res.writeHead(200, { 'Content-Type': registry.contentType });
+        res.end(body);
+      })
+      .catch((e: Error) => {
+        res.writeHead(500).end(e.message);
+      });
   });
-  server.on('error', (e) => activity.error(`Metrics exporter gagal listen di port ${port}: ${e.message}`));
-  server.listen(port, '127.0.0.1', () => activity.info(`Metrics exporter di http://127.0.0.1:${port}/metrics`));
+  server.on('error', (e) => activity.error(`Metrics exporter could not listen on port ${port}: ${e.message}`));
+  server.listen(port, '127.0.0.1', () => activity.info(`Metrics exporter at http://127.0.0.1:${port}/metrics`));
 }

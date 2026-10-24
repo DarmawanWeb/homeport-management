@@ -1,33 +1,50 @@
 import fs from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { StateDTO, StatusDTO, TunnelView } from '../../shared/types.js';
 import { env } from '../config.js';
 import { activity } from '../lib/activity.js';
 import { badRequest, parse } from '../lib/errors.js';
 import { events } from '../lib/events.js';
+import { portOpen } from '../lib/net.js';
+import { expectRestart } from '../lib/restarts.js';
 import { RE_PM2NAME, tunnelName } from '../lib/validators.js';
-import { db, saveDb, settings } from '../store.js';
 import * as caddy from '../services/caddy.js';
 import * as cloudflared from '../services/cloudflared.js';
 import * as pm2 from '../services/pm2.js';
 import { applyAll, createSite, deleteSite, findSite, toggleSite, updateSite } from '../services/sites.js';
-import { portOpen } from '../lib/net.js';
+import { db, saveDb, settings } from '../store.js';
 import { publicSettings } from './settings.js';
-import type { StateDTO, StatusDTO, TunnelView } from '../../shared/types.js';
 
 type IdParams = { Params: { id: string } };
 type NameParams = { Params: { name: string } };
 
-const pm2NameParam = (name: string) => { if (!RE_PM2NAME.test(name)) throw badRequest('Nama proses tidak valid'); return name; };
+const pm2NameParam = (name: string) => {
+  if (!RE_PM2NAME.test(name)) throw badRequest('Invalid process name');
+  return name;
+};
 
 export async function infraRoutes(app: FastifyInstance): Promise<void> {
   // ---------------------------------------------------------------- state & status
-  app.get('/api/state', async (): Promise<StateDTO> => ({ sites: db.sites, settings: publicSettings(), authRequired: !!env.password, platform: process.platform }));
+  app.get(
+    '/api/state',
+    async (): Promise<StateDTO> => ({
+      sites: db.sites,
+      settings: publicSettings(),
+      authRequired: !!env.password,
+      platform: process.platform,
+    }),
+  );
 
   app.get('/api/status', async (): Promise<StatusDTO> => {
     const st = settings();
     const [caddyVersion, cfVersion, pm2Version, adminUp, procs, proxyUp] = await Promise.all([
-      caddy.version(), cloudflared.version(), pm2.version(), caddy.adminUp(), pm2.list(), portOpen('127.0.0.1', st.caddyHttpPort, 500),
+      caddy.version(),
+      cloudflared.version(),
+      pm2.version(),
+      caddy.adminUp(),
+      pm2.list(),
+      portOpen('127.0.0.1', st.caddyHttpPort, 500),
     ]);
     return {
       caddy: { version: caddyVersion, adminUp, proxyUp, pm2: procs.list.find((p) => p.name === st.caddyPm2Name) ?? null },
@@ -42,7 +59,11 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
   // ---------------------------------------------------------------- sites (domains)
   app.get('/api/sites/health', async () => {
     const out: Record<string, boolean> = {};
-    await Promise.all(db.sites.map(async (s) => { out[s.id] = await portOpen(s.upstreamHost, s.upstreamPort); }));
+    await Promise.all(
+      db.sites.map(async (s) => {
+        out[s.id] = await portOpen(s.upstreamHost, s.upstreamPort);
+      }),
+    );
     return out;
   });
   app.post('/api/sites', async (req) => createSite(req.body));
@@ -50,16 +71,21 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
   app.post<IdParams>('/api/sites/:id/toggle', async (req) => toggleSite(req.params.id));
   app.post<IdParams>('/api/sites/:id/route-dns', async (req) => {
     const s = findSite(req.params.id);
-    if (!s.tunnel) throw badRequest('Domain belum punya tunnel');
+    if (!s.tunnel) throw badRequest('This domain has no tunnel');
     await cloudflared.routeDns(s.tunnel, s.hostname, true);
     return { ok: true };
   });
-  app.delete<IdParams & { Querystring: { dns?: string } }>('/api/sites/:id', async (req) => deleteSite(req.params.id, req.query.dns === '1'));
+  app.delete<IdParams & { Querystring: { dns?: string } }>('/api/sites/:id', async (req) =>
+    deleteSite(req.params.id, req.query.dns === '1'),
+  );
 
   // ---------------------------------------------------------------- tunnels
   app.get<{ Querystring: { refresh?: string } }>('/api/tunnels', async (req): Promise<{ tunnels: TunnelView[] }> => {
     const list = await cloudflared.list(req.query.refresh === '1');
-    if (!settings().defaultTunnel && list.length === 1) { settings().defaultTunnel = list[0]!.name; await saveDb(); }
+    if (!settings().defaultTunnel && list.length === 1) {
+      settings().defaultTunnel = list[0]!.name;
+      await saveDb();
+    }
     const procs = (await pm2.list()).list;
     return {
       tunnels: list.map((t) => {
@@ -90,11 +116,22 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
     const name = parse(tunnelName, req.params.name);
     switch (req.params.action) {
       case 'start':
-      case 'restart': await cloudflared.start(name); events.emit('config:changed'); break;
-      case 'stop': await cloudflared.stop(name); break;
-      case 'cleanup': await cloudflared.cleanup(name); break;
-      case 'default': settings().defaultTunnel = name; await saveDb(); break;
-      default: throw badRequest('Aksi tidak valid');
+      case 'restart':
+        await cloudflared.start(name);
+        events.emit('config:changed');
+        break;
+      case 'stop':
+        await cloudflared.stop(name);
+        break;
+      case 'cleanup':
+        await cloudflared.cleanup(name);
+        break;
+      case 'default':
+        settings().defaultTunnel = name;
+        await saveDb();
+        break;
+      default:
+        throw badRequest('Unknown action');
     }
     cloudflared.invalidate();
     return { ok: true };
@@ -118,25 +155,37 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { action: string } }>('/api/caddy/:action', async (req) => {
     switch (req.params.action) {
-      case 'apply': return applyAll();
-      case 'validate': return caddy.validate(await caddy.current());
-      case 'start': return { ok: true, note: await caddy.start() };
-      case 'stop': await caddy.stop(); return { ok: true };
-      case 'reload': await caddy.writeCaddyfile(); return caddy.reload();
-      default: throw badRequest('Aksi tidak valid');
+      case 'apply':
+        return applyAll();
+      case 'validate':
+        return caddy.validate(await caddy.current());
+      case 'start':
+        return { ok: true, note: await caddy.start() };
+      case 'stop':
+        await caddy.stop();
+        return { ok: true };
+      case 'reload':
+        await caddy.writeCaddyfile();
+        return caddy.reload();
+      default:
+        throw badRequest('Unknown action');
     }
   });
 
   app.post('/api/caddy-hash', async (req) => {
-    const { password } = parse(z.object({ password: z.string().min(1, 'password kosong') }), req.body);
+    const { password } = parse(z.object({ password: z.string().min(1, 'Password is empty') }), req.body);
     return { hash: await caddy.hashPassword(password) };
   });
 
   // ---------------------------------------------------------------- pm2
   app.get('/api/pm2', async () => pm2.list(true));
-  app.post('/api/pm2/save', async () => { pm2.must(await pm2.pm2(['save']), 'pm2 save'); return { ok: true }; });
+  app.post('/api/pm2/save', async () => {
+    pm2.must(await pm2.pm2(['save']), 'pm2 save');
+    return { ok: true };
+  });
   app.post<{ Params: { name: string; action: string } }>('/api/pm2/:name/:action', async (req) => {
     const action = parse(z.enum(['restart', 'stop', 'start', 'reload']), req.params.action);
+    expectRestart(req.params.name);
     await pm2.action(pm2NameParam(req.params.name), action);
     return { ok: true };
   });

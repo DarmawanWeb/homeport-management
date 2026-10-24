@@ -1,0 +1,103 @@
+/*
+ * Homeport design tokens.
+ *
+ * The palette borrows from nautical charts: chart-paper background, navy ink,
+ * sea-blue for actions, buoy yellow for "something is in motion", and the
+ * port/starboard navigation lights for status.
+ */
+
+:root {
+  /* surfaces */
+  --paper: #f2f4ef;
+  --panel: #ffffff;
+  --panel-sunk: #e9ede6;
+  --rule: #d6dcd3;
+  --rule-strong: #b9c2b6;
+
+  /* ink */
+  --ink: #14283b;
+  --ink-soft: #3e5266;
+  --ink-faint: #6c7d8c;
+
+  /* roles */
+  --sea: #1d5c88;
+  --sea-strong: #164a6f;
+  --sea-wash: #dde9f1;
+  --buoy: #e3a80b;
+  --buoy-wash: #fbf0cf;
+  --starboard: #1e8a5a;
+  --starboard-wash: #dcefe5;
+  --port: #c2392f;
+  --port-wash: #f7e0dd;
+
+  --focus: 0 0 0 3px color-mix(in srgb, var(--sea) 35%, transparent);
+  --shadow-float: 0 18px 50px -12px rgb(20 40 59 / 0.28), 0 2px 6px rgb(20 40 59 / 0.08);
+
+  /* type */
+  --font-ui: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Semi Condensed", "Barlow", ui-sans-serif, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* scale (1.2 minor third from 15px) */
+  --t-xs: 12px;
+  --t-sm: 13px;
+  --t-md: 15px;
+  --t-lg: 18px;
+  --t-xl: 22px;
+  --t-2xl: 30px;
+  --t-3xl: 40px;
+
+  /* shape: controls are tighter than panels; status is fully round */
+  --r-control: 6px;
+  --r-panel: 10px;
+
+  --sidebar: 248px;
+  color-scheme: light;
+}
+
+/* ECDIS-style night palette: low glare, same hue relationships */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1822;
+    --panel: #13212e;
+    --panel-sunk: #0f1c27;
+    --rule: #22364a;
+    --rule-strong: #30495f;
+    --ink: #dce6ee;
+    --ink-soft: #a8b9c8;
+    --ink-faint: #7890a4;
+    --sea: #5ba8e0;
+    --sea-strong: #84bfea;
+    --sea-wash: #173149;
+    --buoy: #f0bd2e;
+    --buoy-wash: #3a3016;
+    --starboard: #45c189;
+    --starboard-wash: #133427;
+    --port: #ef6b60;
+    --port-wash: #3b1d1c;
+    --shadow-float: 0 18px 50px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0d1822;
+  --panel: #13212e;
+  --panel-sunk: #0f1c27;
+  --rule: #22364a;
+  --rule-strong: #30495f;
+  --ink: #dce6ee;
+  --ink-soft: #a8b9c8;
+  --ink-faint: #7890a4;
+  --sea: #5ba8e0;
+  --sea-strong: #84bfea;
+  --sea-wash: #173149;
+  --buoy: #f0bd2e;
+  --buoy-wash: #3a3016;
+  --starboard: #45c189;
+  --starboard-wash: #133427;
+  --port: #ef6b60;
+  --port-wash: #3b1d1c;
+  --shadow-float: 0 18px 50px -12px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}

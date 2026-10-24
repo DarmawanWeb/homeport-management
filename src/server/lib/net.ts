@@ -13,7 +13,10 @@ export function portOpen(host: string, port: number, timeout = 800): Promise<boo
 function tryConnect(host: string, port: number, timeout: number): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect({ host, port });
-    const done = (v: boolean) => { sock.destroy(); resolve(v); };
+    const done = (v: boolean) => {
+      sock.destroy();
+      resolve(v);
+    };
     sock.setTimeout(timeout, () => done(false));
     sock.once('connect', () => done(true));
     sock.once('error', () => done(false));

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Series } from '../../../src/shared/types';
 
-const PALETTE = ['#f38020', '#5aa9f2', '#3ecf8e', '#b18cf2', '#f2789f', '#2fc4c4', '#f5c04a', '#8b93a3'];
+const PALETTE = ['#2f7ab3', '#e3a80b', '#1e8a5a', '#8a5cc2', '#d4566b', '#2aa3a3', '#c2392f', '#6c7d8c'];
 
 interface Props {
   series: Series[];
@@ -30,10 +30,13 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
   // Draw in real pixels so axis text keeps its size on narrow screens.
   const [W, setW] = useState(600);
   const hasData = series.some((s) => s.points.length > 0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the observed element is swapped when hasData flips
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => { if (e && e.contentRect.width > 0) setW(Math.round(e.contentRect.width)); });
+    const ro = new ResizeObserver(([e]) => {
+      if (e && e.contentRect.width > 0) setW(Math.round(e.contentRect.width));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [hasData]); // the observed element changes between the empty state and the chart
@@ -49,7 +52,12 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
     return { t0, t1, yMax, x, y };
   }, [series, height, min, W]);
 
-  if (!geo) return <div ref={boxRef} className="chart-empty" style={{ height }}>{empty}</div>;
+  if (!geo)
+    return (
+      <div ref={boxRef} className="chart-empty" style={{ height }}>
+        {empty}
+      </div>
+    );
   const { t0, t1, yMax, x, y } = geo;
   const ticks = [min, (min + yMax) / 2, yMax];
 
@@ -60,27 +68,42 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
     setHover(t0 + ((px - PAD.l) / (W - PAD.l - PAD.r)) * (t1 - t0));
   };
 
-  const readout = hover == null ? null : series.map((s, i) => {
-    const p = s.points.reduce((best, q) => (Math.abs(q.t - hover) < Math.abs(best.t - hover) ? q : best), s.points[0] ?? { t: 0, v: 0 });
-    return { label: s.label, v: p.v, t: p.t, color: PALETTE[i % PALETTE.length]! };
-  });
+  const readout =
+    hover == null
+      ? null
+      : series.map((s, i) => {
+          const p = s.points.reduce(
+            (best, q) => (Math.abs(q.t - hover) < Math.abs(best.t - hover) ? q : best),
+            s.points[0] ?? { t: 0, v: 0 },
+          );
+          return { label: s.label, v: p.v, t: p.t, color: PALETTE[i % PALETTE.length]! };
+        });
 
   return (
     <div className="chart" ref={boxRef}>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${height}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img">
+        <title>{series.map((s) => s.label).join(', ')}</title>
         {ticks.map((v) => (
           <g key={v}>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} className="grid" />
-            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" className="axis">{format(v)}</text>
+            <text x={PAD.l - 6} y={y(v) + 4} textAnchor="end" className="axis">
+              {format(v)}
+            </text>
           </g>
         ))}
-        <text x={PAD.l} y={height - 5} className="axis">{timeLabel(t0)}</text>
-        <text x={W - PAD.r} y={height - 5} textAnchor="end" className="axis">{timeLabel(t1)}</text>
+        <text x={PAD.l} y={height - 5} className="axis">
+          {timeLabel(t0)}
+        </text>
+        <text x={W - PAD.r} y={height - 5} textAnchor="end" className="axis">
+          {timeLabel(t1)}
+        </text>
         {series.map((s, i) => {
           const color = PALETTE[i % PALETTE.length];
           const d = s.points.map((p, j) => `${j ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
-          const area = series.length === 1 && s.points.length > 1
-            ? `${d}L${x(s.points.at(-1)!.t).toFixed(1)},${y(min)}L${x(s.points[0]!.t).toFixed(1)},${y(min)}Z` : null;
+          const area =
+            series.length === 1 && s.points.length > 1
+              ? `${d}L${x(s.points.at(-1)!.t).toFixed(1)},${y(min)}L${x(s.points[0]!.t).toFixed(1)},${y(min)}Z`
+              : null;
           return (
             <g key={s.label}>
               {area && <path d={area} fill={color} opacity={0.12} />}
@@ -88,12 +111,19 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
             </g>
           );
         })}
-        {hover != null && hover >= t0 && hover <= t1 && <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={height - PAD.b} className="cursor" />}
+        {hover != null && hover >= t0 && hover <= t1 && (
+          <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={height - PAD.b} className="cursor" />
+        )}
       </svg>
       <div className="legend">
-        {(readout ?? series.map((s, i) => ({ label: s.label, v: s.points.at(-1)?.v ?? 0, color: PALETTE[i % PALETTE.length]!, t: 0 }))).slice(0, 8).map((r) => (
-          <span key={r.label}><i style={{ background: r.color }} />{r.label} <b>{format(r.v)}</b></span>
-        ))}
+        {(readout ?? series.map((s, i) => ({ label: s.label, v: s.points.at(-1)?.v ?? 0, color: PALETTE[i % PALETTE.length]!, t: 0 })))
+          .slice(0, 8)
+          .map((r) => (
+            <span key={r.label}>
+              <i style={{ background: r.color }} />
+              {r.label} <b>{format(r.v)}</b>
+            </span>
+          ))}
         {readout?.[0] && <span className="sub">{timeLabel(readout[0].t)}</span>}
       </div>
     </div>

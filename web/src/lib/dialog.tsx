@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 interface DialogApi {
   open: (content: ReactNode, opts?: { wide?: boolean }) => void;
@@ -6,16 +6,16 @@ interface DialogApi {
   isOpen: boolean;
 }
 
-const Ctx = createContext<DialogApi>({ open: () => {}, close: () => {}, isOpen: false });
+const DialogContext = createContext<DialogApi>({ open: () => {}, close: () => {}, isOpen: false });
 
-/** One modal at a time, rendered in a native <dialog> (focus trap + Esc for free). */
+/** A single modal slot backed by the native <dialog> element (focus trap and Esc for free). */
 export function DialogProvider({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [state, setState] = useState<{ content: ReactNode; wide: boolean; key: number } | null>(null);
-
-  const open = useCallback((content: ReactNode, opts?: { wide?: boolean }) => {
-    setState({ content, wide: !!opts?.wide, key: Date.now() });
-  }, []);
+  const open = useCallback(
+    (content: ReactNode, opts?: { wide?: boolean }) => setState({ content, wide: !!opts?.wide, key: Date.now() }),
+    [],
+  );
   const close = useCallback(() => setState(null), []);
 
   useEffect(() => {
@@ -26,13 +26,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   return (
-    <Ctx.Provider value={{ open, close, isOpen: !!state }}>
+    <DialogContext.Provider value={{ open, close, isOpen: !!state }}>
       {children}
-      <dialog ref={ref} className={state?.wide ? 'wide' : ''} onClose={() => setState(null)} onCancel={() => setState(null)}>
+      <dialog ref={ref} className={`modal${state?.wide ? ' wide' : ''}`} onClose={close}>
         {state && <div key={state.key}>{state.content}</div>}
       </dialog>
-    </Ctx.Provider>
+    </DialogContext.Provider>
   );
 }
 
-export const useDialog = () => useContext(Ctx);
+export const useDialog = () => useContext(DialogContext);

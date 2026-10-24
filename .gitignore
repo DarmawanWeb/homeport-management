@@ -1,4 +1,7 @@
 node_modules
 dist
 data
+.tmp
 *.log
+docs/.vitepress/cache
+docs/.vitepress/dist

@@ -13,21 +13,31 @@ export const fmtDuration = (ms: number | null | undefined): string => {
 };
 
 export const fmtUptime = (sec: number): string => {
-  if (sec < 3600) return `${Math.round(sec / 60)} mnt`;
-  if (sec < 86_400) return `${Math.round(sec / 3600)} jam`;
-  return `${Math.round(sec / 86_400)} hari`;
+  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))} min`;
+  if (sec < 86_400) return `${Math.round(sec / 3600)} h`;
+  const d = Math.round(sec / 86_400);
+  return `${d} day${d === 1 ? '' : 's'}`;
 };
 
 export const ago = (t: string | number | null | undefined): string => {
-  if (!t) return '—';
+  if (!t) return 'never';
   const s = (Date.now() - (typeof t === 'number' ? t : Date.parse(t))) / 1000;
-  if (s < 60) return 'baru saja';
-  if (s < 3600) return `${Math.floor(s / 60)} mnt lalu`;
-  if (s < 86_400) return `${Math.floor(s / 3600)} jam lalu`;
-  return `${Math.floor(s / 86_400)} hari lalu`;
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.round(s / 3600)} h ago`;
+  const d = Math.round(s / 86_400);
+  return `${d} day${d === 1 ? '' : 's'} ago`;
 };
 
 export const repoShort = (repo: string): string =>
-  repo.replace(/^https:\/\/(www\.)?github\.com\//, '').replace(/^git@github\.com:/, '').replace(/^file:\/\/.*\//, '').replace(/\.git$/, '');
+  repo
+    .replace(/^https:\/\/(www\.)?github\.com\//, '')
+    .replace(/^git@github\.com:/, '')
+    .replace(/^file:\/\/.*\//, '')
+    .replace(/\.git$/, '');
 
 export const shortSha = (sha?: string | null) => (sha ?? '').slice(0, 7);
+
+export const fmtPct = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)}%`;
+export const fmtRate = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(2));
+export const fmtSeconds = (v: number) => (v >= 1 ? `${v.toFixed(1)}s` : `${(v * 1000).toFixed(0)}ms`);

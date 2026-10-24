@@ -1,14 +1,14 @@
-import { run, tail, type RunOptions, type RunResult } from '../lib/exec.js';
-import { HttpError } from '../lib/errors.js';
-import { settings } from '../store.js';
 import type { Pm2Proc } from '../../shared/types.js';
+import { HttpError } from '../lib/errors.js';
+import { type RunOptions, type RunResult, run, stripAnsi, tail } from '../lib/exec.js';
+import { settings } from '../store.js';
 
 export const pm2 = (args: string[], opts?: RunOptions): Promise<RunResult> => run(settings().pm2Bin, args, opts);
 
 /** Throw a readable error if a pm2 call failed. */
 export function must(r: RunResult, what: string): RunResult {
-  if (r.notFound) throw new HttpError(500, `${what}: binary tidak ditemukan (${r.cmd.split(' ')[0]}). Cek Settings.`);
-  if (!r.ok) throw new HttpError(500, `${what} gagal: ${tail(r)}`);
+  if (r.notFound) throw new HttpError(500, `${what}: ${r.cmd.split(' ')[0]} was not found. Check the path in Settings.`);
+  if (!r.ok) throw new HttpError(500, `${what} failed: ${tail(r)}`);
   return r;
 }
 
@@ -27,7 +27,7 @@ export async function list(fresh = false): Promise<{ list: Pm2Proc[]; error: str
   const r = await pm2(['jlist'], { timeout: 20_000, quiet: true });
   let value: { list: Pm2Proc[]; error: string | null };
   if (!r.ok) {
-    value = { list: [], error: r.notFound ? 'pm2 tidak ditemukan' : (r.stderr || 'pm2 jlist gagal').trim() };
+    value = { list: [], error: r.notFound ? 'pm2 was not found' : (r.stderr || 'pm2 jlist failed').trim() };
   } else {
     try {
       const raw = JSON.parse(r.stdout.slice(r.stdout.indexOf('['))) as RawProc[];
@@ -48,14 +48,16 @@ export async function list(fresh = false): Promise<{ list: Pm2Proc[]; error: str
         }),
       };
     } catch {
-      value = { list: [], error: 'output pm2 tidak bisa di-parse' };
+      value = { list: [], error: 'could not parse pm2 output' };
     }
   }
   cache = { at: Date.now(), value };
   return value;
 }
 
-export const invalidate = () => { cache = null; };
+export const invalidate = () => {
+  cache = null;
+};
 
 export async function find(name: string): Promise<Pm2Proc | undefined> {
   return (await list()).list.find((p) => p.name === name);
@@ -87,10 +89,10 @@ export async function action(name: string, act: 'restart' | 'stop' | 'start' | '
 
 export async function logs(name: string, lines = 150): Promise<string> {
   const r = await pm2(['logs', name, '--lines', String(lines), '--nostream', '--raw'], { quiet: true, timeout: 15_000 });
-  return `${r.stdout}\n${r.stderr}`.trim();
+  return stripAnsi(`${r.stdout}\n${r.stderr}`).trim();
 }
 
 export async function version(): Promise<string | null> {
   const r = await pm2(['--version'], { quiet: true, timeout: 15_000 });
-  return r.ok ? r.stdout.trim().split('\n').pop() ?? null : null;
+  return r.ok ? (r.stdout.trim().split('\n').pop() ?? null) : null;
 }

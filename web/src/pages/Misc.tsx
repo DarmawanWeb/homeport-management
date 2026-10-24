@@ -1,68 +1,143 @@
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Button, Empty, Tag, Toolbar } from '../components/ui';
-import { get, post } from '../lib/api';
-import { useLogs, useRefresh } from '../lib/queries';
+import { type FormEvent, useState } from 'react';
+import { BrandMark } from '../components/Shell';
+import { Badge, Button, Empty, Loading, PageHead, Panel, Segmented } from '../components/ui';
+import { post } from '../lib/api';
+import { useCaddyfile, useLogs, useRefresh } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
 export function Caddyfile() {
-  const { data, error, refetch } = useQuery({ queryKey: ['caddyfile'], queryFn: () => get<{ generated: string; current: string | null; file: string }>('/api/caddyfile') });
+  const { data, error } = useCaddyfile();
   const toast = useToast();
   const refresh = useRefresh();
-  if (error) return <Empty>{error.message}</Empty>;
-  if (!data) return <Empty>Memuat…</Empty>;
+  if (error)
+    return (
+      <div className="page">
+        <Empty title="Could not load the Caddyfile">{error.message}</Empty>
+      </div>
+    );
+  if (!data) return <Loading />;
   const strip = (t: string | null) => (t ?? '').replace(/^# \d{4}-\d\d-\d\dT.*$/m, '');
   const synced = data.current !== null && strip(data.current) === strip(data.generated);
+
   return (
-    <>
-      <Toolbar title="Caddyfile">
-        {synced ? <Tag tone="ok">tersinkron</Tag> : <Tag tone="err">belum di-apply</Tag>}
-        <Button onClick={async () => { const r = await post<{ ok: boolean; output: string }>('/api/caddy/validate'); toast(r.ok ? 'Caddyfile valid ✓' : `Tidak valid:\n${r.output}`, r.ok ? 'ok' : 'err'); }}>Validate</Button>
-        <Button variant="primary" onClick={async () => { await post('/api/caddy/apply'); toast('Applied', 'ok'); await refetch(); await refresh('status'); }}>Apply &amp; reload</Button>
-      </Toolbar>
-      <div className="sub mono mb">{data.file}</div>
-      <pre className="box">{data.generated}</pre>
-      <p className="hint">File ini dibuat dari daftar Domains. Untuk opsi global atau blok mentah tambahan, pakai kolom di Settings → Caddy.</p>
-    </>
+    <div className="page">
+      <PageHead
+        title="Caddyfile"
+        description="Generated from your domains. Every change is validated by Caddy before it replaces the running config, and the previous file is kept as a backup."
+        actions={
+          <>
+            <Button
+              onClick={async () => {
+                const r = await post<{ ok: boolean; output: string }>('/api/caddy/validate');
+                toast(r.ok ? 'The Caddyfile is valid' : `Caddy rejected it:\n${r.output}`, r.ok ? 'ok' : 'err');
+              }}
+            >
+              Validate
+            </Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                await post('/api/caddy/apply');
+                toast('Applied and reloaded', 'ok');
+                await refresh('caddyfile', 'status');
+              }}
+            >
+              Apply and reload
+            </Button>
+          </>
+        }
+      />
+      <Panel
+        title={<span className="code">{data.file}</span>}
+        actions={
+          synced ? (
+            <Badge tone="ok" light>
+              In sync
+            </Badge>
+          ) : (
+            <Badge tone="warn" light>
+              Not applied yet
+            </Badge>
+          )
+        }
+        flush
+      >
+        <pre className="config">{data.generated}</pre>
+      </Panel>
+    </div>
   );
 }
 
 export function Activity() {
   const { data } = useLogs();
-  const [filter, setFilter] = useState<'all' | 'error'>('all');
+  const [filter, setFilter] = useState<'all' | 'problems'>('all');
   const logs = (data?.logs ?? []).filter((l) => filter === 'all' || l.level !== 'info');
   return (
-    <>
-      <Toolbar title="Log aktivitas">
-        <div className="seg">
-          <button className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>Semua</button>
-          <button className={filter === 'error' ? 'on' : ''} onClick={() => setFilter('error')}>Warning &amp; error</button>
-        </div>
-      </Toolbar>
-      <div className="card log">
-        {logs.length ? logs.map((l, i) => (
-          <div key={l.t + i} className={`l ${l.level}`}>
-            <span className="t">{new Date(l.t).toLocaleTimeString()}</span><span className="m">{l.msg}</span>
-            {l.detail && <pre>{l.detail}</pre>}
-          </div>
-        )) : <Empty>Belum ada aktivitas</Empty>}
-      </div>
-    </>
+    <div className="page">
+      <PageHead
+        title="Activity log"
+        description="Every command Homeport ran and what it said back, newest first. Kept in memory for the last 500 events."
+        actions={
+          <Segmented
+            label="Filter"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              ['all', 'Everything'],
+              ['problems', 'Warnings and errors'],
+            ]}
+          />
+        }
+      />
+      <Panel flush>
+        {logs.length ? (
+          logs.map((l) => (
+            <div key={`${l.t}-${l.msg}`} className={`log-line ${l.level}`}>
+              <time dateTime={l.t}>{new Date(l.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>
+              <div>
+                <div className="msg">{l.msg}</div>
+                {l.detail && <pre>{l.detail}</pre>}
+              </div>
+            </div>
+          ))
+        ) : (
+          <Empty title={filter === 'all' ? 'Nothing has happened yet' : 'No warnings or errors'} />
+        )}
+      </Panel>
+    </div>
   );
 }
 
 export function Login({ onDone }: { onDone: () => void }) {
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await post('/api/login', { password: pw });
+      onDone();
+    } catch (x) {
+      setErr((x as Error).message);
+    }
+  };
   return (
-    <form className="login card section" onSubmit={async (e) => {
-      e.preventDefault();
-      try { await post('/api/login', { password: pw }); onDone(); } catch (x) { setErr((x as Error).message); }
-    }}>
-      <h3>🔒 Homeport</h3>
-      <div className="field"><label>Password</label><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus /></div>
-      {err && <p className="err-text">{err}</p>}
-      <button className="btn primary" type="submit">Masuk</button>
-    </form>
+    <div className="login">
+      <form className="panel" onSubmit={submit}>
+        <div className="panel-body form">
+          <div className="brand" style={{ padding: 0 }}>
+            <BrandMark />
+            <span className="brand-name">Homeport</span>
+          </div>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />
+          </label>
+          {err && <p style={{ color: 'var(--port)', fontSize: 'var(--t-sm)' }}>{err}</p>}
+          <button className="btn primary" type="submit">
+            Sign in
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

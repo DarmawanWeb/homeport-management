@@ -1,13 +1,14 @@
-import { SetupBanners, type Page } from '../components/Layout';
+import { Play, RotateCw, ShieldCheck, Square } from 'lucide-react';
 import { Pm2LogsDialog } from '../components/Logs';
-import { Button, Empty, Tag, Toolbar } from '../components/ui';
+import { SetupNotices } from '../components/Shell';
+import { Badge, Button, Empty, Light, PageHead, Panel } from '../components/ui';
 import { post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
-import { fmtBytes, fmtUptime } from '../lib/format';
+import { fmtBytes, fmtPct, fmtUptime } from '../lib/format';
 import { useAppState, useApps, usePm2, useRefresh, useStatus } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
-export function Services({ onNavigate }: { onNavigate: (p: Page) => void }) {
+export function Services() {
   const { data: s } = useStatus();
   const { data: state } = useAppState();
   const { data: pm2 } = usePm2();
@@ -19,66 +20,164 @@ export function Services({ onNavigate }: { onNavigate: (p: Page) => void }) {
 
   const caddy = async (action: string) => {
     const r = await post<{ ok?: boolean; note?: string; reloaded?: boolean; reason?: string; output?: string }>(`/api/caddy/${action}`);
-    if (action === 'validate') toast(r.ok ? 'Caddyfile valid ✓' : `Tidak valid:\n${r.output}`, r.ok ? 'ok' : 'err');
-    else toast(r.note ?? r.reason ?? `Caddy: ${action} OK`, r.reloaded === false ? 'warn' : 'ok');
+    if (action === 'validate') toast(r.ok ? 'The Caddyfile is valid' : `Caddy rejected the config:\n${r.output}`, r.ok ? 'ok' : 'err');
+    else toast(r.note ?? r.reason ?? `Caddy ${action === 'stop' ? 'stopped' : 'reloaded'}`, r.reloaded === false ? 'warn' : 'ok');
     setTimeout(() => void refresh('status', 'pm2'), 1200);
   };
-  const pm2Act = async (name: string, action: string) => { await post(`/api/pm2/${encodeURIComponent(name)}/${action}`); toast(`${name}: ${action} OK`, 'ok'); await refresh('pm2', 'apps'); };
-  const kind = (name: string) => apps?.apps.some((a) => a.name === name) ? 'app'
-    : name === 'homeport' || name === st?.caddyPm2Name || name.startsWith(st?.tunnelPm2Prefix ?? '\0') || name.startsWith('hp-') ? 'system' : 'other';
+  const pm2Act = async (name: string, action: string) => {
+    await post(`/api/pm2/${encodeURIComponent(name)}/${action}`);
+    toast(`${name}: ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarted'}`, 'ok');
+    await refresh('pm2', 'apps');
+  };
+  const kind = (name: string) =>
+    apps?.apps.some((a) => a.name === name)
+      ? 'App'
+      : name === 'homeport' || name === st?.caddyPm2Name || name.startsWith(st?.tunnelPm2Prefix ?? '\0') || name.startsWith('hp-')
+        ? 'System'
+        : null;
 
   return (
-    <>
-      <SetupBanners onNavigate={onNavigate} />
-      <div className="grid2 mb">
-        <div className="card section">
-          <h3>Caddy</h3>
-          <div className="kv">
-            <div><span className="k">Versi</span>{s?.caddy.version ?? 'tidak ditemukan'}</div>
-            <div><span className="k">Admin API</span>{s?.caddy.adminUp ? <Tag tone="ok">jalan</Tag> : <Tag tone="err">mati</Tag>} <span className="sub">{st?.caddyAdmin}</span></div>
-            <div><span className="k">Proxy</span>{s?.caddy.proxyUp ? <Tag tone="ok">listen :{st?.caddyHttpPort}</Tag> : <Tag tone="err">tidak listen</Tag>}</div>
-            <div><span className="k">pm2</span>{s?.caddy.pm2 ? s.caddy.pm2.status : 'tidak dikelola pm2'}</div>
-          </div>
-          <div className="actions left">
-            <Button size="sm" variant="primary" onClick={() => caddy('start')}>Start</Button>
-            <Button size="sm" onClick={() => caddy('reload')}>Reload</Button>
-            <Button size="sm" onClick={() => caddy('validate')}>Validate</Button>
-            <Button size="sm" variant="danger" onClick={() => caddy('stop')}>Stop</Button>
-            {s?.caddy.pm2 && st && <Button size="sm" onClick={() => open(<Pm2LogsDialog name={st.caddyPm2Name} />, { wide: true })}>Logs</Button>}
-          </div>
+    <div className="page">
+      <PageHead
+        title="Services"
+        description="Everything pm2 keeps alive on this machine: your apps, the Caddy proxy, tunnels and monitoring."
+      />
+      <SetupNotices />
+      <div className="stack">
+        <div className="cols">
+          <Panel
+            title="Caddy"
+            description="Reverse proxy that routes each hostname to its port."
+            actions={
+              st && s?.caddy.pm2 ? (
+                <Button size="sm" onClick={() => open(<Pm2LogsDialog name={st.caddyPm2Name} />, { wide: true })}>
+                  Logs
+                </Button>
+              ) : null
+            }
+          >
+            <div className="stack" style={{ gap: 16 }}>
+              <dl className="kv">
+                <dt>Version</dt>
+                <dd>{s?.caddy.version ?? 'Not installed'}</dd>
+                <dt>Admin API</dt>
+                <dd className="btn-row" style={{ gap: 8 }}>
+                  <Light tone={s?.caddy.adminUp ? 'ok' : 'err'} /> {s?.caddy.adminUp ? 'Answering' : 'Not answering'}{' '}
+                  <span className="code muted">{st?.caddyAdmin}</span>
+                </dd>
+                <dt>Proxy</dt>
+                <dd className="btn-row" style={{ gap: 8 }}>
+                  <Light tone={s?.caddy.proxyUp ? 'ok' : 'err'} /> {s?.caddy.proxyUp ? 'Listening' : 'Not listening'}{' '}
+                  <span className="code muted">:{st?.caddyHttpPort}</span>
+                </dd>
+              </dl>
+              <div className="btn-row">
+                <Button variant="primary" icon={<Play />} onClick={() => caddy('start')}>
+                  Start
+                </Button>
+                <Button icon={<RotateCw />} onClick={() => caddy('reload')}>
+                  Reload
+                </Button>
+                <Button icon={<ShieldCheck />} onClick={() => caddy('validate')}>
+                  Validate
+                </Button>
+                <Button variant="danger" icon={<Square />} onClick={() => caddy('stop')}>
+                  Stop
+                </Button>
+              </div>
+            </div>
+          </Panel>
+          <Panel title="pm2" description="Process manager that restarts anything that crashes.">
+            <div className="stack" style={{ gap: 16 }}>
+              <dl className="kv">
+                <dt>Version</dt>
+                <dd>{s?.pm2.version ?? s?.pm2.error ?? '—'}</dd>
+                <dt>After a reboot</dt>
+                <dd>
+                  Run <span className="code">pm2 startup</span> once in a terminal, then save the process list here.
+                </dd>
+              </dl>
+              <div className="btn-row">
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    await post('/api/pm2/save');
+                    toast('Process list saved. It will be restored after a reboot.', 'ok');
+                  }}
+                >
+                  Save process list
+                </Button>
+              </div>
+            </div>
+          </Panel>
         </div>
-        <div className="card section">
-          <h3>pm2</h3>
-          <div className="kv"><div><span className="k">Versi</span>{s?.pm2.version ?? s?.pm2.error ?? '—'}</div></div>
-          <p className="hint">Setelah semua jalan, klik <b>Simpan pm2</b>. Sekali saja jalankan <code>pm2 startup</code> di Terminal agar semua hidup lagi setelah Mac reboot.</p>
-          <div className="actions left">
-            <Button size="sm" variant="primary" onClick={async () => { await post('/api/pm2/save'); toast('pm2 save OK', 'ok'); }}>Simpan pm2</Button>
-            <Button size="sm" onClick={() => refresh('pm2', 'status')}>⟳ Refresh</Button>
-          </div>
-        </div>
-      </div>
 
-      <Toolbar title="Proses pm2" count={pm2?.list.length} />
-      <div className="card">
-        {!pm2?.list.length ? <Empty>{pm2?.error ?? 'Tidak ada proses pm2'}</Empty> : (
-          <table>
-            <thead><tr><th>Nama</th><th>Status</th><th className="hide-sm">CPU / RAM</th><th className="hide-sm">Uptime</th><th /></tr></thead>
-            <tbody>{pm2.list.map((p) => (
-              <tr key={p.name}>
-                <td><div className="host">{p.name} {kind(p.name) === 'system' && <Tag tone="acc">sistem</Tag>}{kind(p.name) === 'app' && <Tag>app</Tag>}</div><div className="sub">id {p.id}{p.port ? ` · PORT ${p.port}` : ''} · ↻{p.restarts}</div></td>
-                <td><Tag tone={p.status === 'online' ? 'ok' : 'err'}>{p.status}</Tag></td>
-                <td className="hide-sm">{p.cpu}% / {fmtBytes(p.mem)}</td>
-                <td className="hide-sm">{p.status === 'online' && p.uptime ? fmtUptime((Date.now() - p.uptime) / 1000) : '—'}</td>
-                <td><div className="actions">
-                  <Button size="sm" onClick={() => pm2Act(p.name, 'restart')}>Restart</Button>
-                  {p.status === 'online' ? <Button size="sm" onClick={() => pm2Act(p.name, 'stop')}>Stop</Button> : <Button size="sm" onClick={() => pm2Act(p.name, 'start')}>Start</Button>}
-                  <Button size="sm" onClick={() => open(<Pm2LogsDialog name={p.name} />, { wide: true })}>Logs</Button>
-                </div></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        )}
+        <Panel
+          title="Processes"
+          description={pm2 ? `${pm2.list.filter((p) => p.status === 'online').length} of ${pm2.list.length} online` : undefined}
+          flush
+        >
+          {!pm2?.list.length ? (
+            <Empty title="No pm2 processes">{pm2?.error ?? 'Nothing is running under pm2 yet.'}</Empty>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Process</th>
+                  <th>Status</th>
+                  <th className="hide-sm">CPU</th>
+                  <th className="hide-sm">Memory</th>
+                  <th className="hide-sm">Uptime</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {pm2.list.map((p) => {
+                  const k = kind(p.name);
+                  return (
+                    <tr key={`${p.id}-${p.name}`}>
+                      <td className="primary-cell">
+                        {p.name} {k && <Badge tone={k === 'App' ? 'sea' : undefined}>{k}</Badge>}
+                        <span className="sub">
+                          {p.port ? `PORT ${p.port}, ` : ''}
+                          {p.restarts} restart{p.restarts === 1 ? '' : 's'}
+                        </span>
+                      </td>
+                      <td>
+                        <Badge tone={p.status === 'online' ? 'ok' : 'err'} light>
+                          {p.status}
+                        </Badge>
+                      </td>
+                      <td className="hide-sm">{fmtPct(p.cpu)}</td>
+                      <td className="hide-sm">{fmtBytes(p.mem)}</td>
+                      <td className="hide-sm">{p.status === 'online' && p.uptime ? fmtUptime((Date.now() - p.uptime) / 1000) : '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <Button size="sm" onClick={() => pm2Act(p.name, 'restart')}>
+                            Restart
+                          </Button>
+                          {p.status === 'online' ? (
+                            <Button size="sm" onClick={() => pm2Act(p.name, 'stop')}>
+                              Stop
+                            </Button>
+                          ) : (
+                            <Button size="sm" onClick={() => pm2Act(p.name, 'start')}>
+                              Start
+                            </Button>
+                          )}
+                          <Button size="sm" onClick={() => open(<Pm2LogsDialog name={p.name} />, { wide: true })}>
+                            Logs
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </Panel>
       </div>
-    </>
+    </div>
   );
 }
