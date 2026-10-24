@@ -1,12 +1,13 @@
 import { buildApp } from './app.js';
 import { adoptEnvPassword } from './auth/index.js';
-import { loadAuth, passwordSet } from './auth/store.js';
+import { loadAuth, prepareSetupCode } from './auth/store.js';
 import { DATA_DIR, env, extendPath } from './config.js';
 import { activity } from './lib/activity.js';
 import { errMsg } from './lib/errors.js';
 import { startAlertLoop } from './monitoring/alerts.js';
 import { startExporter } from './monitoring/exporter.js';
 import { registerMonitoringHooks, writeConfigs } from './monitoring/service.js';
+import { FLAVOR, FLAVOR_LABEL } from './platform.js';
 import { detectMetricsMode } from './services/caddy.js';
 import { markInterrupted, pollOnce } from './services/deploy.js';
 import { registerDeployNotifications } from './services/notify.js';
@@ -35,8 +36,12 @@ async function main(): Promise<void> {
 
   const app = await buildApp();
   await app.listen({ host: env.host, port: env.port });
-  console.log(`\n  Homeport is running at http://${env.host}:${env.port}\n  Data: ${DATA_DIR}\n`);
-  if (!passwordSet()) console.log('  Open the address above on this machine to set a dashboard password.\n');
+  console.log(`\n  Homeport is running at http://${env.host}:${env.port} (${FLAVOR_LABEL[FLAVOR]})\n  Data: ${DATA_DIR}\n`);
+  const code = prepareSetupCode();
+  if (code) {
+    console.log('  No dashboard password yet. Open the dashboard and set one.');
+    console.log(`  From another computer, enter this setup code:  ${code}\n`);
+  }
 
   const shutdown = async () => {
     await app.close();

@@ -27,10 +27,19 @@ export const paths = {
   web: path.join(ROOT, 'dist', 'web'),
 };
 
-/** pm2/launchd often start with a minimal PATH — make Homebrew binaries visible. */
+/**
+ * pm2, launchd and DSM's Task Scheduler start with a minimal PATH. Make Homebrew, the Linux
+ * installer's bin folder and user-level npm binaries visible.
+ */
 export function extendPath(): void {
   if (IS_WIN) return;
-  const extra = ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', path.join(os.homedir(), '.local/bin')];
+  const extra = [
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    path.join(os.homedir(), '.local/bin'),
+    process.env.HOMEPORT_BIN || path.join(os.homedir(), '.homeport', 'bin'),
+  ];
   const cur = (process.env.PATH || '').split(':').filter(Boolean);
   process.env.PATH = [...cur, ...extra.filter((p) => !cur.includes(p))].join(':');
 }
@@ -55,7 +64,7 @@ export function defaultSettings(): Settings {
     caddyfilePath: path.join(DATA_DIR, 'Caddyfile'),
     caddyHttpPort: 8080,
     caddyAdmin: 'localhost:2019',
-    cloudflaredDir: path.join(os.homedir(), '.cloudflared'),
+    cloudflaredDir: process.env.HOMEPORT_CLOUDFLARED_DIR || path.join(os.homedir(), '.cloudflared'),
     caddyPm2Name: 'hp-caddy',
     tunnelPm2Prefix: 'hp-cf-',
     defaultTunnel: '',
@@ -63,7 +72,7 @@ export function defaultSettings(): Settings {
     cfApiToken: '',
     caddyGlobalExtra: '',
     caddyRawAppend: '',
-    appsDir: path.join(os.homedir(), 'apps'),
+    appsDir: process.env.HOMEPORT_APPS_DIR || path.join(os.homedir(), 'apps'),
     webhookPort: 9000,
     webhookDomain: '',
     portRangeStart: 3001,

@@ -71,7 +71,7 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
           await refresh();
         }}
       >
-        <p>The domain and its DNS record are removed. The dashboard stays available on this Mac at 127.0.0.1.</p>
+        <p>The domain and its DNS record are removed. The dashboard stays available on this machine at 127.0.0.1.</p>
       </Modal>,
     );
 
@@ -105,7 +105,7 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
             <div className="public-row muted">
               <Light label="Private" />
               <div className="grow">
-                <strong>Only this Mac</strong>
+                <strong>Only this machine</strong>
                 <div className="sub">Reachable at http://127.0.0.1:{data.dashboardPort}</div>
               </div>
             </div>
@@ -114,7 +114,8 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
 
         {!totpEnabled && (
           <Notice icon={<ShieldAlert />} tone="err">
-            Turn on two-factor sign-in below before or right after publishing. Anyone who guesses the password can run commands on this Mac.
+            Turn on two-factor sign-in below before or right after publishing. Anyone who guesses the password can run commands on this
+            machine.
           </Notice>
         )}
 
@@ -122,7 +123,7 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
           <Field label="Hostname" hint="A subdomain of a zone in your Cloudflare account. Its DNS record is created for you.">
             <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="deploy.example.com" />
           </Field>
-          <Field label="Tunnel" hint={tunnelNames.length ? 'Any tunnel on this Mac works.' : 'Create one on the Tunnels page first.'}>
+          <Field label="Tunnel" hint={tunnelNames.length ? 'Any tunnel on this machine works.' : 'Create one on the Tunnels page first.'}>
             <select value={tunnel} onChange={(e) => setTunnel(e.target.value)}>
               <option value="">{data.defaultTunnel ? `Default (${data.defaultTunnel})` : 'Choose a tunnel'}</option>
               {tunnelNames.map((n) => (
@@ -139,8 +140,8 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
           </div>
         </div>
         <p className="fine">
-          Sign-ins over the public hostname use a secure cookie, are rate limited per address, and lock for everyone except this Mac if many
-          fail at once. For an extra gate in front, add a Cloudflare Access policy to the hostname.
+          Sign-ins over the public hostname use a secure cookie, are rate limited per address, and lock for everyone except this machine if
+          many fail at once. For an extra gate in front, add a Cloudflare Access policy to the hostname.
         </p>
       </div>
     </Panel>
@@ -427,7 +428,7 @@ function Sessions() {
       {!data ? (
         <Loading />
       ) : data.length === 0 ? (
-        <Empty title="No sessions">This Mac is using the dashboard without a password.</Empty>
+        <Empty title="No sessions">This machine is using the dashboard without a password.</Empty>
       ) : (
         <table className="table">
           <thead>
@@ -454,12 +455,12 @@ function Sessions() {
                           This device
                         </Badge>
                       )}
-                      <div className="sub show-sm">{s.via === 'local' ? 'This Mac' : s.ip}</div>
+                      <div className="sub show-sm">{s.via === 'local' ? 'This machine' : s.ip}</div>
                     </div>
                   </div>
                 </td>
                 <td className="hide-sm">
-                  <span className="mono">{s.via === 'local' ? 'This Mac' : s.ip}</span>
+                  <span className="mono">{s.via === 'local' ? 'This machine' : s.ip}</span>
                 </td>
                 <td className="hide-sm nowrap">{ago(s.createdAt)}</td>
                 <td className="nowrap">{s.current ? 'Now' : ago(s.lastSeenAt)}</td>

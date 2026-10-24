@@ -23,6 +23,7 @@ export default defineConfig({
         items: [
           { text: 'Why Homeport', link: '/guide/introduction' },
           { text: 'Getting started', link: '/guide/getting-started' },
+          { text: 'Synology NAS and Linux', link: '/guide/synology' },
           { text: 'Deploying apps', link: '/guide/deploying-apps' },
           { text: 'Domains and tunnels', link: '/guide/domains-and-tunnels' },
           { text: 'Public dashboard', link: '/guide/public-dashboard' },

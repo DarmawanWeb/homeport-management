@@ -3,7 +3,27 @@ import { HttpError } from '../lib/errors.js';
 import { type RunOptions, type RunResult, run, stripAnsi, tail } from '../lib/exec.js';
 import { settings } from '../store.js';
 
-export const pm2 = (args: string[], opts?: RunOptions): Promise<RunResult> => run(settings().pm2Bin, args, opts);
+const MUTATING = new Set(['start', 'stop', 'restart', 'reload', 'delete', 'startOrReload', 'startOrRestart']);
+let saveTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Keep pm2's dump in step with what Homeport started or stopped, so `pm2 resurrect` after a reboot
+ * (launchd, systemd, DSM Task Scheduler or the Docker entrypoint) brings back exactly this state.
+ */
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void run(settings().pm2Bin, ['save', '--force'], { quiet: true, timeout: 20_000 });
+  }, 3000);
+  saveTimer.unref();
+}
+
+export async function pm2(args: string[], opts?: RunOptions): Promise<RunResult> {
+  const r = await run(settings().pm2Bin, args, opts);
+  if (r.ok && MUTATING.has(args[0] ?? '')) scheduleSave();
+  return r;
+}
 
 /** Throw a readable error if a pm2 call failed. */
 export function must(r: RunResult, what: string): RunResult {

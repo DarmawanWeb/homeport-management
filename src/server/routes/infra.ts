@@ -8,6 +8,7 @@ import { events } from '../lib/events.js';
 import { portOpen } from '../lib/net.js';
 import { expectRestart } from '../lib/restarts.js';
 import { RE_PM2NAME, tunnelName } from '../lib/validators.js';
+import { allHints, FLAVOR, FLAVOR_LABEL } from '../platform.js';
 import * as caddy from '../services/caddy.js';
 import * as cloudflared from '../services/cloudflared.js';
 import * as pm2 from '../services/pm2.js';
@@ -31,6 +32,9 @@ export async function infraRoutes(app: FastifyInstance): Promise<void> {
       sites: db.sites,
       settings: publicSettings(),
       platform: process.platform,
+      flavor: FLAVOR,
+      flavorLabel: FLAVOR_LABEL[FLAVOR],
+      hints: allHints(),
     }),
   );
 

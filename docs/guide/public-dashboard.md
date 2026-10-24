@@ -4,9 +4,9 @@ Homeport can be opened from anywhere, the way you would open a hosted platform's
 
 ![Sign-in page on a public hostname](/screenshots/login.png)
 
-## 1. Set a password on the Mac
+## 1. Set a password
 
-The first time you open `http://127.0.0.1:7070` on the Mac, Homeport asks for a password before showing anything else. This step only works on the Mac itself: a browser coming in through a tunnel or Caddy sees "Finish setup on the Mac" instead, so nobody can claim an unprotected dashboard.
+The first time you open `http://127.0.0.1:7070` on the Mac, Homeport asks for a password before showing anything else. From any other computer (a NAS has no screen) the same screen also asks for the one-time **setup code** that Homeport prints to its log and writes to `data/setup-code`. Without it nobody can claim an unprotected dashboard, whether over the LAN or a tunnel.
 
 Passwords need at least 10 characters. A few unrelated words work well.
 
@@ -48,7 +48,7 @@ On the Mac, in the Homeport folder:
 npm run reset-password
 ```
 
-This clears the password, two-factor and all sessions, then restarts Homeport. Until a new password is set, public hostnames show "Finish setup on the Mac" and only the Mac can open the dashboard.
+This clears the password, two-factor and all sessions, then restarts Homeport with a new setup code. In Docker: `docker exec homeport npm run reset-password`.
 
 ## Grafana
 

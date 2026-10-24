@@ -1,5 +1,9 @@
 # Getting started
 
+::: tip Not on a Mac?
+On a Synology NAS, a Linux server or a Raspberry Pi, follow [Synology NAS and Linux](/guide/synology) instead, then come back for *First run*.
+:::
+
 ## Requirements
 
 - macOS on Apple Silicon or Intel (Linux works too; the setup script is macOS-only)

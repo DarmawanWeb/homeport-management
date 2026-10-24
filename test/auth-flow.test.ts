@@ -10,7 +10,7 @@ process.env.TM_DATA_DIR = dir;
 delete process.env.TM_PASSWORD;
 
 const { buildApp } = await import('../src/server/app.js');
-const { loadAuth } = await import('../src/server/auth/store.js');
+const { loadAuth, prepareSetupCode } = await import('../src/server/auth/store.js');
 const { base32Decode, hotp, totpStep } = await import('../src/server/auth/secrets.js');
 
 let app: FastifyInstance;
@@ -70,14 +70,25 @@ describe('auth flow', () => {
     expect(r.json().error).toMatch(/password/);
   });
 
-  it('only lets the Mac set the first password, and rejects weak ones', async () => {
+  it('sets the first password locally, or remotely only with the setup code', async () => {
+    const setupCode = prepareSetupCode() ?? '';
+    expect(setupCode).toMatch(/^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$/);
+    expect(fs.readFileSync(path.join(dir, 'setup-code'), 'utf8').trim()).toBe(setupCode);
     expect((await call('POST', '/api/auth/setup', { headers: REMOTE, body: { password: PASSWORD } })).statusCode).toBe(403);
+    expect(
+      (await call('POST', '/api/auth/setup', { headers: REMOTE, body: { password: PASSWORD, setupCode: 'AAAA-BBBB-CCCC-DDDD' } }))
+        .statusCode,
+    ).toBe(403);
     expect((await call('POST', '/api/auth/setup', { body: { password: 'short' } })).statusCode).toBe(400);
-    const r = await call('POST', '/api/auth/setup', { body: { password: PASSWORD } });
+    // Codes are accepted in any case and with or without dashes, as people type them.
+    const typed = setupCode.toLowerCase().replaceAll('-', ' ');
+    const r = await call('POST', '/api/auth/setup', { headers: REMOTE, body: { password: PASSWORD, setupCode: typed } });
     expect(r.statusCode).toBe(200);
     session = cookieOf(r) ?? '';
     expect(session).not.toBe('');
     expect((await call('POST', '/api/auth/setup', { body: { password: 'another-password-1' } })).statusCode).toBe(409);
+    // The code is single-use: it is gone once a password exists.
+    expect(fs.existsSync(path.join(dir, 'setup-code'))).toBe(false);
     // The password file is private and holds no plaintext.
     const file = path.join(dir, 'auth.json');
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);

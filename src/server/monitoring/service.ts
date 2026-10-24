@@ -8,6 +8,7 @@ import { badRequest, errMsg } from '../lib/errors.js';
 import { events } from '../lib/events.js';
 import { run } from '../lib/exec.js';
 import { portOpen } from '../lib/net.js';
+import { BIN_DIR, FLAVOR, installHint } from '../platform.js';
 import * as caddy from '../services/caddy.js';
 import * as pm2 from '../services/pm2.js';
 import { saveDb, settings } from '../store.js';
@@ -32,11 +33,13 @@ export async function grafanaHome(): Promise<string | null> {
   const configured = settings().monitoring.grafanaHome;
   const ok = (p: string) => fs.existsSync(path.join(p, 'conf', 'defaults.ini'));
   if (configured) return ok(configured) ? configured : null;
-  const brew = await run('brew', ['--prefix', 'grafana'], { quiet: true, timeout: 10_000 });
+  const brew = FLAVOR === 'mac' ? await run('brew', ['--prefix', 'grafana'], { quiet: true, timeout: 10_000 }) : { ok: false, stdout: '' };
   const candidates = [
     ...(brew.ok ? [path.join(brew.stdout.trim(), 'share', 'grafana')] : []),
     '/opt/homebrew/opt/grafana/share/grafana',
     '/usr/local/opt/grafana/share/grafana',
+    // setup-linux.sh unpacks the release tarball next to its bin folder
+    path.join(BIN_DIR, '..', 'grafana'),
     '/usr/share/grafana',
   ];
   return candidates.find(ok) ?? null;
@@ -113,7 +116,7 @@ async function startComponent(key: ComponentKey): Promise<void> {
     const home = await grafanaHome();
     if (!home)
       throw badRequest(
-        'Could not find the Grafana install folder. Set "Grafana home" in Settings, for example /opt/homebrew/opt/grafana/share/grafana.',
+        'Could not find the Grafana install folder. Set "Grafana home" in Settings: the folder that contains conf/defaults.ini.',
       );
     const args = ['--homepath', home, '--config', P.grafanaIni];
     await pm2.startBinary(PM2_NAMES.grafana, m.grafanaBin, isLegacyGrafana(m.grafanaBin) ? args : ['server', ...args]);
@@ -127,7 +130,7 @@ export async function start(): Promise<string[]> {
     (['prometheus', 'grafana', 'nodeExporter'] as const).map(async (k) => [k, await versionOf(k)] as const),
   );
   const missing = versions.filter(([, v]) => !v).map(([k]) => k);
-  if (missing.includes('prometheus')) throw badRequest('Prometheus is not installed. Run: brew install prometheus');
+  if (missing.includes('prometheus')) throw badRequest(`Prometheus is not installed. ${installHint('prometheus')}`);
 
   st.monitoring.enabled = true;
   await saveDb();

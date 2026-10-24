@@ -15,7 +15,7 @@ Options considered:
 ## Decision
 
 - The dashboard stays bound to 127.0.0.1. Publishing it creates an ordinary domain that routes to it through the tunnel and Caddy.
-- **Trust is anchored on the Mac.** A request counts as local only with a loopback socket, a loopback `Host` and no proxy headers. Setting the first password and recovering a lost one (`npm run reset-password`) are only possible locally. Before a password exists, remote requests are refused and Homeport will not route a domain to the dashboard.
+- **Trust is anchored on the machine.** A request counts as local only with a loopback socket, a loopback `Host` and no proxy headers. Before a password exists, remote requests are refused and Homeport will not route a domain to the dashboard. The first password can be set locally, or from another computer with a one-time setup code that Homeport prints to its log and writes to a mode-600 file. Reading either already requires access to the machine, which is what a NAS or container owner has and an attacker on the LAN does not. Recovery (`npm run reset-password`) also needs that access.
 - Credentials: scrypt password hash, optional TOTP with replay protection and hashed recovery codes. Sessions are random tokens stored as hashes, in HttpOnly SameSite=Strict cookies, Secure over HTTPS.
 - Brute force: per-address exponential lockout and a global failure budget that pauses remote sign-ins but never the Mac's own.
 - Auth state lives in `data/auth.json` (mode 600), separate from `db.json`, so backups and exports never carry it.

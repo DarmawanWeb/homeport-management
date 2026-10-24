@@ -2,19 +2,13 @@ import { BellRing, ExternalLink, Power, RotateCw, ScrollText, ShieldCheck } from
 import { useState } from 'react';
 import type { ComponentKey } from '../../../src/shared/types';
 import { Pm2LogsDialog } from '../components/Logs';
-import { Badge, Button, CopyField, Empty, Field, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
+import { Badge, Button, CopyField, Empty, Field, Hint, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
 import { get, post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago, fmtPct, fmtRate, fmtSeconds } from '../lib/format';
-import { useMonitoring, useRefresh } from '../lib/queries';
+import { useAppState, useMonitoring, useRefresh } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { MetricPanel, RangePicker, type RangeValue } from './Overview';
-
-const INSTALL: Record<ComponentKey, string> = {
-  prometheus: 'brew install prometheus',
-  grafana: 'brew install grafana',
-  nodeExporter: 'brew install node_exporter',
-};
 
 const PURPOSE: Record<ComponentKey, string> = {
   prometheus: 'Collects metrics every 15 seconds and evaluates alert rules.',
@@ -24,6 +18,8 @@ const PURPOSE: Record<ComponentKey, string> = {
 
 export function Monitoring() {
   const { data: m, error } = useMonitoring();
+  const { data: state } = useAppState();
+  const hint = (k: ComponentKey | 'caddy') => state?.hints[k] ?? '';
   const { open } = useDialog();
   const toast = useToast();
   const refresh = useRefresh();
@@ -104,8 +100,16 @@ export function Monitoring() {
       <div className="stack">
         {!m.enabled && (
           <Notice>
-            Turning it on starts three processes under pm2, all bound to 127.0.0.1, using about 300 MB of memory. Install them first with{' '}
-            <code>brew install prometheus grafana node_exporter</code>.
+            Turning it on starts three processes under pm2, all bound to 127.0.0.1, using about 300 MB of memory.
+            {state?.flavor === 'docker' ? (
+              <> Prometheus and node_exporter are in the image. Grafana is not; the charts below cover the same metrics.</>
+            ) : (
+              <>
+                {' '}
+                Install them first: <code>{hint('prometheus')}</code>, <code>{hint('nodeExporter')}</code> and{' '}
+                <code>{hint('grafana')}</code>.
+              </>
+            )}
           </Notice>
         )}
 
@@ -122,7 +126,7 @@ export function Monitoring() {
                   {PURPOSE[c.key]}
                 </p>
                 {!c.installed ? (
-                  <code>{INSTALL[c.key]}</code>
+                  <Hint text={hint(c.key)} />
                 ) : (
                   <div className="btn-row">
                     <span className="muted code" style={{ fontSize: 'var(--t-xs)' }}>
@@ -206,7 +210,7 @@ export function Monitoring() {
               {m.caddyMetrics === 'none' && (
                 <div style={{ padding: '14px 18px 0' }}>
                   <Notice>
-                    This Caddy version has no HTTP metrics. Update it with <code>brew upgrade caddy</code>.
+                    This Caddy version has no HTTP metrics. Update it: <Hint text={hint('caddy')} />.
                   </Notice>
                 </div>
               )}

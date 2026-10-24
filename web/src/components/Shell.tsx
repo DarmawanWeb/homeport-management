@@ -18,10 +18,10 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { post } from '../lib/api';
-import { useApps, useAuth, useMonitoring, useStatus, useSystem, useTunnels } from '../lib/queries';
+import { useAppState, useApps, useAuth, useMonitoring, useStatus, useSystem, useTunnels } from '../lib/queries';
 import { href, type Route } from '../lib/router';
 import { useToast } from '../lib/toast';
-import { Button, Light, Notice } from './ui';
+import { Button, Hint, Light, Notice } from './ui';
 
 export function BrandMark({ className = 'brand-mark' }: { className?: string }) {
   return (
@@ -105,6 +105,7 @@ function currentTheme(): 'light' | 'dark' {
 
 export function Shell({ route, children, onSearch }: { route: Route; children: ReactNode; onSearch: () => void }) {
   const nav = useNav();
+  const { data: state } = useAppState();
   const { data: status } = useStatus();
   const { data: sys } = useSystem();
   const [open, setOpen] = useState(false);
@@ -153,7 +154,10 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
           <BrandMark />
           <div>
             <div className="brand-name">Homeport</div>
-            <div className="brand-host">{sys?.hostname ?? '…'}</div>
+            <div className="brand-host">
+              {sys?.hostname ?? '…'}
+              {state && state.flavor !== 'mac' ? ` · ${state.flavorLabel}` : ''}
+            </div>
           </div>
         </div>
         <nav className="stack" style={{ gap: 18 }}>
@@ -229,6 +233,7 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
 /** First-run guidance: shown at the top of operational pages until the basics work. */
 export function SetupNotices() {
   const { data: s, refetch } = useStatus();
+  const { data: state } = useAppState();
   const { data: tunnels } = useTunnels();
   const toast = useToast();
   if (!s) return null;
@@ -254,7 +259,7 @@ export function SetupNotices() {
   if (!s.cloudflared.version)
     items.push(
       <Notice key="cf" icon={icon}>
-        cloudflared is not installed. Run <code>brew install cloudflared</code>.
+        cloudflared is not installed. <Hint text={state?.hints.cloudflared} />
       </Notice>,
     );
   else if (!s.cloudflared.loggedIn)
@@ -274,7 +279,7 @@ export function SetupNotices() {
   if (!s.caddy.version)
     items.push(
       <Notice key="caddy" icon={icon}>
-        Caddy is not installed. Run <code>brew install caddy</code>.
+        Caddy is not installed. <Hint text={state?.hints.caddy} />
       </Notice>,
     );
   else if (!s.caddy.adminUp)

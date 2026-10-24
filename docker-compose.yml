@@ -1,0 +1,21 @@
+# Homeport on Synology Container Manager (Project → Create → paste this), or `docker compose up -d`.
+#
+# Host networking lets Caddy, the webhook listener and your apps use the NAS's ports directly,
+# and lets cloudflared, Prometheus and Grafana reach them on 127.0.0.1.
+# Open http://<nas-ip>:7070 and enter the setup code from the container log.
+
+services:
+  homeport:
+    image: ghcr.io/darmawanweb/homeport:latest
+    # build: .   # or build it on the NAS from a clone of the repository
+    container_name: homeport
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Jakarta
+      PORT: 7070
+    volumes:
+      # On Synology, create these folders first, e.g. under /volume1/docker/homeport/
+      - ./data:/data   # database, password, tunnels, Caddyfile, pm2 state, metrics
+      - ./apps:/apps   # cloned repositories
+

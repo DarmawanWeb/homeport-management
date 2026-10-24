@@ -6,6 +6,7 @@ import { env } from '../config.js';
 import { activity } from '../lib/activity.js';
 import { badRequest, HttpError, notFound, parse } from '../lib/errors.js';
 import { hostname } from '../lib/validators.js';
+import { FLAVOR } from '../platform.js';
 import { createSite, deleteSite } from '../services/sites.js';
 import { db, settings } from '../store.js';
 import { type ClientInfo, LoginLimiter, requestClient, sameOrigin } from './guard.js';
@@ -20,7 +21,12 @@ import {
   verifyPassword,
   verifyTotp,
 } from './secrets.js';
-import { auth, passwordSet, type SessionRecord, saveAuth, totpEnabled } from './store.js';
+import { auth, checkSetupCode, clearSetupCode, passwordSet, SETUP_CODE_FILE, type SessionRecord, saveAuth, totpEnabled } from './store.js';
+
+const SETUP_CODE_WHERE = {
+  docker: 'Container Manager → Container → homeport → Log (or docker logs homeport). It is also in the file setup-code in the data folder.',
+  native: `Run pm2 logs homeport on the machine, or cat ${SETUP_CODE_FILE}`,
+};
 
 export const SESSION_COOKIE = 'hp_session';
 const IDLE_MS = 30 * 24 * 60 * 60_000;
@@ -177,7 +183,7 @@ export async function authPlugin(app: FastifyInstance): Promise<void> {
     if (!passwordSet()) {
       // Before a password exists only this machine may use the dashboard.
       if (req.client.local) return;
-      throw new HttpError(403, 'Open the dashboard on the Mac itself and set a password first');
+      throw new HttpError(403, 'Set a dashboard password first. Open the dashboard and enter the setup code from the log.');
     }
     if (!s) throw new HttpError(401, 'Sign in first');
   });
@@ -188,19 +194,32 @@ export async function authPlugin(app: FastifyInstance): Promise<void> {
       authenticated: passwordSet() ? !!req.session : req.client.local,
       local: req.client.local,
       totpEnabled: totpEnabled(),
+      flavor: FLAVOR,
+      setupCodeWhere: passwordSet() ? '' : SETUP_CODE_WHERE[FLAVOR === 'docker' ? 'docker' : 'native'],
       publicUrls: dashboardSites().map((s) => `https://${s.hostname}`),
     };
   });
 
   app.post('/api/auth/setup', async (req, reply) => {
     if (passwordSet()) throw new HttpError(409, 'A password is already set');
-    if (!req.client.local) throw new HttpError(403, 'The first password can only be set on the Mac itself');
-    const { password } = parse(z.object({ password: newPassword }), req.body);
+    const { password, setupCode } = parse(z.object({ password: newPassword, setupCode: z.string().max(40).optional() }), req.body);
+    if (!req.client.local) {
+      // From another computer the setup code proves access to the machine's logs or files.
+      const wait = limiter.retryAfter(req.client);
+      if (wait > 0) throw new HttpError(429, `Too many attempts. Try again in ${Math.ceil(wait / 60_000)} min.`);
+      if (!setupCode || !checkSetupCode(setupCode)) {
+        limiter.fail(req.client);
+        activity.warn(`Wrong setup code from ${req.client.ip}`);
+        await slow();
+        throw new HttpError(403, 'That setup code is not right');
+      }
+    }
     auth.passwordHash = await hashPassword(password);
     auth.passwordChangedAt = new Date().toISOString();
     endSessions();
+    clearSetupCode();
     await startSession(req, reply);
-    activity.info('Dashboard password set');
+    activity.info(`Dashboard password set from ${req.client.local ? 'this machine' : req.client.ip}`);
     return { ok: true };
   });
 
@@ -350,5 +369,6 @@ export async function adoptEnvPassword(): Promise<void> {
   auth.passwordHash = await hashPassword(env.password);
   auth.passwordChangedAt = new Date().toISOString();
   await saveAuth();
+  clearSetupCode();
   activity.info('Imported TM_PASSWORD as the dashboard password. You can remove it from the pm2 config now.');
 }

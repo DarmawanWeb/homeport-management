@@ -160,7 +160,14 @@ export interface StateDTO {
   sites: Site[];
   settings: PublicSettings;
   platform: string;
+  flavor: Flavor;
+  flavorLabel: string;
+  /** How to install or update each external tool here (brew, the Linux installer, the Docker image). */
+  hints: Record<ToolKey, string>;
 }
+
+export type Flavor = 'mac' | 'linux' | 'synology' | 'docker' | 'windows';
+export type ToolKey = 'caddy' | 'cloudflared' | 'prometheus' | 'grafana' | 'nodeExporter' | 'git';
 
 export interface StatusDTO {
   caddy: { version: string | null; adminUp: boolean; proxyUp: boolean; pm2: Pm2Proc | null };
@@ -268,6 +275,9 @@ export interface AuthStatusDTO {
   /** The browser is on the Mac itself, not coming in through a public hostname. */
   local: boolean;
   totpEnabled: boolean;
+  flavor: Flavor;
+  /** Where to read the one-time setup code, while no password exists. */
+  setupCodeWhere: string;
   publicUrls: string[];
 }
 

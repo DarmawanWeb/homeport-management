@@ -1,12 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, KeyRound, LockKeyhole, ShieldCheck, Smartphone, TerminalSquare } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import type { AuthStatusDTO } from '../../../src/shared/types';
 import { BrandMark } from '../components/Shell';
 import { Loading } from '../components/ui';
 import { ApiError, post, UNAUTHORIZED_EVENT } from '../lib/api';
 import { useAuth } from '../lib/queries';
 
-/** Keeps the dashboard behind the right screen: first-run setup, sign-in, or "set it up on the Mac". */
+/** Keeps the dashboard behind the right screen: first-run setup or sign-in. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const { data, refetch, error } = useAuth();
   const qc = useQueryClient();
@@ -27,11 +28,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return (
       <AuthLayout>
         <h1>Homeport is not answering</h1>
-        <p className="auth-lede">The dashboard server could not be reached. Check that it is running with pm2 ls on the Mac.</p>
+        <p className="auth-lede">The dashboard server could not be reached. Check that it is running (pm2 ls, or the container status).</p>
       </AuthLayout>
     );
   if (!data) return <Loading />;
-  if (!data.passwordSet) return data.local ? <SetupScreen onDone={done} /> : <LockedScreen />;
+  if (!data.passwordSet) return <SetupScreen auth={data} onDone={done} />;
   if (!data.authenticated) return <LoginScreen onDone={done} />;
   return <>{children}</>;
 }
@@ -52,7 +53,7 @@ function AuthLayout({ children }: { children: ReactNode }) {
           <p className="auth-tag">
             Push to GitHub.
             <br />
-            It runs on the Mac under your desk.
+            It runs on the machine under your desk.
           </p>
         </div>
         <ul className="auth-facts">
@@ -168,12 +169,15 @@ const ErrorLine = ({ children }: { children: string }) =>
 
 // ---------------------------------------------------------------- screens
 
-function SetupScreen({ onDone }: { onDone: () => Promise<void> }) {
+function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Promise<void> }) {
+  const [code, setCode] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
+  const needCode = !auth.local;
+  const machine = MACHINE[auth.flavor];
   const { busy, err, submit } = useSubmit(async () => {
     if (pw !== pw2) throw new Error('The two passwords do not match');
-    await post('/api/auth/setup', { password: pw });
+    await post('/api/auth/setup', { password: pw, setupCode: needCode ? code : undefined });
     await onDone();
   });
   return (
@@ -183,10 +187,34 @@ function SetupScreen({ onDone }: { onDone: () => Promise<void> }) {
       </span>
       <h1>Set a dashboard password</h1>
       <p className="auth-lede">
-        Homeport can run any command on this Mac, so it needs a password before it goes anywhere near the internet. You only do this once,
-        here on the Mac.
+        Homeport can run any command on this {machine}, so it needs a password before anything else. You only do this once.
       </p>
       <form className="form" onSubmit={submit}>
+        {needCode && (
+          <div className="setup-code">
+            <label className="field">
+              <span>Setup code</span>
+              <input
+                className="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="ABCD-EFGH-IJKL-MNOP"
+                autoComplete="off"
+                spellCheck={false}
+                required
+                // biome-ignore lint/a11y/noAutofocus: first field of the setup form
+                autoFocus
+              />
+            </label>
+            <p className="setup-where">
+              <TerminalSquare />
+              <span>
+                You are not on the {machine} itself, so prove you can reach it. The code is printed when Homeport starts. Find it in{' '}
+                {auth.setupCodeWhere}
+              </span>
+            </p>
+          </div>
+        )}
         <label className="field">
           <span>New password</span>
           <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" required />
@@ -203,11 +231,21 @@ function SetupScreen({ onDone }: { onDone: () => Promise<void> }) {
         </button>
       </form>
       <p className="auth-foot">
-        Forgot it later? Run <code>npm run reset-password</code> in the Homeport folder on the Mac.
+        Forgot it later? Run{' '}
+        <code>{auth.flavor === 'docker' ? 'docker exec homeport npm run reset-password' : 'npm run reset-password'}</code>{' '}
+        {auth.flavor === 'docker' ? 'on the NAS.' : `in the Homeport folder on the ${machine}.`}
       </p>
     </AuthLayout>
   );
 }
+
+const MACHINE: Record<AuthStatusDTO['flavor'], string> = {
+  mac: 'Mac',
+  synology: 'NAS',
+  docker: 'server',
+  linux: 'server',
+  windows: 'PC',
+};
 
 function LoginScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [pw, setPw] = useState('');
@@ -314,24 +352,6 @@ function LoginScreen({ onDone }: { onDone: () => Promise<void> }) {
           </div>
         )}
       </form>
-    </AuthLayout>
-  );
-}
-
-function LockedScreen() {
-  return (
-    <AuthLayout>
-      <span className="auth-icon">
-        <TerminalSquare />
-      </span>
-      <h1>Finish setup on the Mac</h1>
-      <p className="auth-lede">
-        This dashboard has no password yet, so it only opens on the Mac itself. Open <code>http://127.0.0.1:7070</code> there and set one,
-        then come back to this page.
-      </p>
-      <button className="btn lg" type="button" onClick={() => location.reload()}>
-        I have set it, reload
-      </button>
     </AuthLayout>
   );
 }

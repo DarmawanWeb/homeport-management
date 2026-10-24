@@ -156,7 +156,7 @@ export function Settings() {
                 <input value={f.monitoring.nodeExporterBin} onChange={(e) => setMon('nodeExporterBin', e.target.value)} />
               </Field>
             </div>
-            <Field label="Grafana home" hint="Leave blank to find it automatically. With Homebrew it is …/opt/grafana/share/grafana.">
+            <Field label="Grafana home" hint="Leave blank to find it automatically. It is the folder that contains conf/defaults.ini.">
               <input value={f.monitoring.grafanaHome} onChange={(e) => setMon('grafanaHome', e.target.value)} />
             </Field>
             <div className="form-row">

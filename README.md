@@ -4,7 +4,7 @@
 
 # Homeport
 
-**Push to GitHub, and it runs on the Mac mini under your desk.**
+**Push to GitHub, and it runs on the Mac mini or Synology NAS under your desk.**
 
 A self-hosted deploy platform for Node apps: git push deploys with automatic rollback, domains through Cloudflare Tunnel with no open ports, Prometheus and Grafana monitoring, and a dashboard you can open from anywhere behind a password and two-factor sign-in.
 
@@ -84,6 +84,7 @@ Things that were harder than they looked, and how they were solved.
 - **Telling crashes from deploys.** pm2's restart counter rises on every reload, so a naive crash-loop alert fired on busy deploy days. Planned actions now open a short "expected restart" window, and only restarts outside it increment `homeport_app_crashes_total`.
 - **Version-aware metrics.** `metrics { per_host }` only exists in Caddy 2.9 and newer. Homeport probes the installed Caddy once and emits the syntax it accepts.
 - **Safe concurrent state.** Early versions occasionally failed a rename when several saves overlapped. Writes are now serialized and coalesced, and always go through a temp file and rename. ([decision 5](docs/decisions/0005-json-store.md))
+- **One codebase, four platforms.** Homeport only drives CLIs, so macOS, Linux, Synology DSM and Docker differ in install hints and defaults, not code paths. A headless machine sets its first password with a one-time code from its own log. Homeport keeps pm2's saved process list in step with every change, so `pm2 resurrect` from launchd, systemd, DSM's Task Scheduler or the container entrypoint brings back exactly what was running. CI boots the image, sets it up from "another computer", restarts it and checks that everything came back.
 - **Monitoring checked in CI.** Every PromQL expression in the dashboards and alert rules is sent to a real Prometheus in CI, and the generated config goes through `promtool check config`. Renaming a metric can't quietly break a panel. ([decision 6](docs/decisions/0006-as-code.md))
 - **A public dashboard whose trust starts on the Mac.** The dashboard can be published like a hosted platform's, but only a request that is genuinely local (loopback socket, loopback `Host`, no proxy headers, which also defeats DNS rebinding) can set the first password or recover a lost one. Passwords are scrypt-hashed, two-factor is RFC 6238 TOTP with replay protection and single-use recovery codes, session tokens are stored only as hashes, and sign-in has per-address and global lockouts. An integration test drives the whole flow, from first setup through remote sign-in, code replay and password change. ([decision 7](docs/decisions/0007-public-dashboard))
 - **Small public surface.** Apps and the webhook path are public; the dashboard only if you publish it. The API binds to localhost, requires a custom header and matching Origin on every mutation (CSRF), sends a strict CSP, validates all input with Zod, and never builds shell strings from input. ([security model](docs/guide/security.md))
@@ -94,12 +95,14 @@ Things that were harder than they looked, and how they were solved.
 |---|---|
 | Server | Node 20+, TypeScript (strict), Fastify 5, Zod 4, prom-client |
 | Dashboard | React 19, TanStack Query, Vite, lucide icons, hand-written CSS with design tokens, hand-rolled SVG charts |
-| Runtime | pm2, Caddy, cloudflared |
+| Runtime | pm2, Caddy, cloudflared; macOS, Linux, Synology DSM, Docker (amd64 and arm64) |
 | Observability | Prometheus, Grafana, node_exporter, Discord and Telegram webhooks |
-| Quality | Biome (lint and format), Vitest, `tsc` for both projects, Prometheus and promtool in CI |
+| Quality | Biome (lint and format), Vitest, `tsc` for both projects; CI also checks PromQL against Prometheus, builds and boots the Docker image, and runs the Linux installer on x86 and ARM runners |
 | Docs | VitePress on GitHub Pages, architecture decision records, draw.io diagrams as code |
 
 ## Quick start
+
+**Mac**
 
 ```bash
 git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
@@ -107,6 +110,19 @@ cd ~/homeport
 bash setup-mac.sh          # installs Caddy, cloudflared, pm2, Prometheus, Grafana; builds and starts Homeport
 open http://127.0.0.1:7070   # set a password, then optionally publish it under Access
 ```
+
+**Synology NAS** (Container Manager → Project, or any Docker host)
+
+```yaml
+services:
+  homeport:
+    image: ghcr.io/darmawanweb/homeport:latest
+    network_mode: host
+    restart: unless-stopped
+    volumes: [./data:/data, ./apps:/apps]
+```
+
+Open `http://<nas-ip>:7070` and enter the setup code from the container log. Without Container Manager, or on any Linux box or Raspberry Pi: `bash setup-linux.sh`. See the [Synology and Linux guide](https://darmawanweb.github.io/homeport-management/guide/synology).
 
 Moving from a hand-made Caddy or tunnel setup? `bash reset-mac.sh --dry-run` lists what it would remove, and `bash reset-mac.sh` removes it step by step after backing up the config.
 

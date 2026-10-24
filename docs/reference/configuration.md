@@ -2,14 +2,18 @@
 
 ## Environment variables
 
-Set in `ecosystem.config.cjs` for the `homeport` pm2 process.
+Set in `ecosystem.config.cjs` for the `homeport` pm2 process, or as container environment variables.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HOST` | `127.0.0.1` | Dashboard bind address. Keep it; publish through a tunnel instead |
+| `HOST` | `127.0.0.1` (`0.0.0.0` in Docker and from `setup-linux.sh`) | Dashboard bind address. Remote browsers always need the password, or the setup code before one exists |
 | `PORT` | `7070` | Dashboard and API port |
 | `TM_PASSWORD` | unset | Deprecated. If set and no password exists yet, it is imported once as the dashboard password |
 | `TM_DATA_DIR` | `./data` | Where state and generated files live |
+| `HOMEPORT_APPS_DIR` | `~/apps` | Default folder for cloned apps (Docker: `/apps`) |
+| `HOMEPORT_CLOUDFLARED_DIR` | `~/.cloudflared` | Cloudflare certificate and tunnel credentials (Docker: `/data/cloudflared`) |
+| `HOMEPORT_BIN` | `~/.homeport/bin` | Extra folder searched for caddy, cloudflared and the monitoring tools; `setup-linux.sh` installs there |
+| `HOMEPORT_FLAVOR` | detected | `mac`, `linux`, `synology` or `docker`; only changes install hints and texts |
 
 Everything else is in **Settings** and stored in `data/db.json`. The password, two-factor secret and sessions live in `data/auth.json` (mode 600), which is never included in exports.
 

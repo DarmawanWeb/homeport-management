@@ -32,7 +32,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Shell scripts
-        run: bash -n setup-mac.sh && bash -n reset-mac.sh
+        run: shellcheck setup-mac.sh reset-mac.sh setup-linux.sh docker/entrypoint.sh scripts/smoke.sh
 
   monitoring:
     name: Prometheus config and queries
@@ -76,3 +76,69 @@ jobs:
           npm run diagrams
           git diff --exit-code docs/public/diagrams || (echo "::error::Run npm run diagrams and commit the result" && exit 1)
       - run: npm run docs:build
+
+  docker:
+    name: Docker image (build, set up, restart)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: homeport:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start
+        # Published ports make the test traffic come from the Docker bridge, like a browser on the LAN.
+        run: docker run -d --name homeport -p 7070:7070 -v hp-data:/data -v hp-apps:/apps homeport:ci
+      - name: Tools in the image
+        run: |
+          docker exec homeport caddy version
+          docker exec homeport cloudflared --version
+          docker exec homeport prometheus --version
+          docker exec homeport node_exporter --version
+          docker exec homeport git --version
+      - name: First setup with the code from the container log
+        run: |
+          bash scripts/smoke.sh setup http://127.0.0.1:7070 docker "docker exec homeport cat /data/setup-code"
+          docker logs homeport 2>&1 | grep -q "setup code" || (echo "::error::Setup code not in the container log" && exit 1)
+      - name: Survives a restart
+        run: |
+          docker restart homeport
+          bash scripts/smoke.sh resumed http://127.0.0.1:7070
+      - name: Container log
+        if: always()
+        run: docker logs homeport 2>&1 | tail -80
+
+  installer:
+    name: Linux installer (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: |
+          bash setup-linux.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.homeport/bin" >> "$GITHUB_PATH"
+      - name: First setup from another address
+        run: |
+          ip=$(hostname -I | awk '{print $1}')
+          bash scripts/smoke.sh setup "http://$ip:7070" linux "cat data/setup-code"
+      - name: Survives pm2 being killed and resurrected (a reboot)
+        run: |
+          pm2 kill
+          pm2 resurrect
+          bash scripts/smoke.sh resumed "http://$(hostname -I | awk '{print $1}'):7070"
+      - name: pm2 state
+        if: always()
+        run: pm2 ls && pm2 logs homeport --lines 40 --nostream
