@@ -57,8 +57,15 @@ pm2 startOrReload ecosystem.config.cjs --update-env
 pm2 save
 
 echo
-g "▸ Start on boot: run this once (needs sudo)"
-pm2 startup launchd 2>/dev/null | grep -E '^sudo' || pm2 startup
+# Without root, pm2 prints the sudo command and exits non-zero; show just that command.
+out=$(pm2 startup launchd 2>&1 || true)
+if line=$(grep -E '^sudo' <<<"$out"); then
+  g "▸ Start on boot: run this once"
+  echo "  $line"
+else
+  g "▸ Start on boot"
+  tail -3 <<<"$out"
+fi
 
 echo
 y "Recommended for a Mac used as a server (needs sudo):"

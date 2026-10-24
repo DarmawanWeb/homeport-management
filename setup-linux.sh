@@ -208,8 +208,15 @@ if ((SYNOLOGY)); then
   echo "      export HOME=$HOME PATH=$BIN:$NPM_PREFIX/bin:/usr/local/bin:\$PATH"
   echo "      $PM2_BIN resurrect"
 elif command -v systemctl >/dev/null 2>&1; then
-  g "▸ Start on boot: run this once (needs sudo)"
-  pm2 startup systemd -u "$(id -un)" --hp "$HOME" 2>/dev/null | grep -E '^sudo' || pm2 startup
+  # Without root, pm2 prints the sudo command and exits non-zero; show just that command.
+  out=$(pm2 startup systemd -u "$(id -un)" --hp "$HOME" 2>&1 || true)
+  if line=$(grep -E '^sudo' <<<"$out"); then
+    g "▸ Start on boot: run this once"
+    echo "  $line"
+  else
+    g "▸ Start on boot"
+    tail -3 <<<"$out"
+  fi
 else
   y "▸ No systemd found. Add \"$PM2_BIN resurrect\" to your system's startup scripts."
 fi
