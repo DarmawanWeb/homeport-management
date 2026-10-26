@@ -1,6 +1,6 @@
 {
   "name": "homeport",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "Self-hosted deploy platform for a Mac mini: git push deploys with rollback, pm2, Caddy, Cloudflare Tunnel, Prometheus and Grafana.",
   "main": "dist/server/index.js",
   "scripts": {
@@ -22,6 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
+    "@fastify/http-proxy": "^11.6.5",
     "@fastify/static": "^10.1.7",
     "fastify": "^5.12.7",
     "prom-client": "^15.1.3",

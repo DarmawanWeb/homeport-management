@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { ComponentKey, MonitoringComponent, MonitoringStatus, PromAlert, QueryRangeDTO, Series } from '../../shared/types.js';
+import { paths } from '../config.js';
 import { activity } from '../lib/activity.js';
 import { badRequest, errMsg } from '../lib/errors.js';
 import { events } from '../lib/events.js';
@@ -22,7 +23,6 @@ export const PM2_NAMES: Record<ComponentKey, string> = {
 };
 
 const promUrl = () => `http://127.0.0.1:${settings().monitoring.prometheusPort}`;
-export const grafanaUrl = () => `http://127.0.0.1:${settings().monitoring.grafanaPort}`;
 
 // ---------------------------------------------------------------- discovery
 
@@ -100,7 +100,20 @@ export async function reloadPrometheus(): Promise<void> {
 
 // ---------------------------------------------------------------- lifecycle
 
-async function startComponent(key: ComponentKey): Promise<void> {
+// Starting, restarting and the one-time upgrade can be triggered at the same moment (startup, a click);
+// run them one at a time so pm2 never sees the same process started twice.
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const next = queue.then(fn, fn);
+  queue = next.catch(() => undefined);
+  return next;
+}
+
+function startComponent(key: ComponentKey): Promise<void> {
+  return serial(() => startComponentNow(key));
+}
+
+async function startComponentNow(key: ComponentKey): Promise<void> {
   const m = settings().monitoring;
   if (key === 'prometheus') {
     await pm2.startBinary(PM2_NAMES.prometheus, m.prometheusBin, [
@@ -109,6 +122,9 @@ async function startComponent(key: ComponentKey): Promise<void> {
       `--storage.tsdb.retention.time=${m.retention}`,
       `--web.listen-address=127.0.0.1:${m.prometheusPort}`,
       '--web.enable-lifecycle',
+      // Served at / for Homeport; its own links point at /prometheus/, where Homeport proxies it.
+      `--web.external-url=http://localhost:${m.prometheusPort}/prometheus/`,
+      '--web.route-prefix=/',
     ]);
   } else if (key === 'nodeExporter') {
     await pm2.startBinary(PM2_NAMES.nodeExporter, m.nodeExporterBin, [`--web.listen-address=127.0.0.1:${m.nodeExporterPort}`]);
@@ -165,10 +181,12 @@ export async function stop(): Promise<void> {
   activity.info('Monitoring stopped');
 }
 
-export async function restartComponent(key: ComponentKey): Promise<void> {
-  await writeConfigs();
-  await pm2.remove(PM2_NAMES[key]);
-  await startComponent(key);
+export function restartComponent(key: ComponentKey): Promise<void> {
+  return serial(async () => {
+    await writeConfigs();
+    await pm2.remove(PM2_NAMES[key]);
+    await startComponentNow(key);
+  });
 }
 
 // ---------------------------------------------------------------- status & queries
@@ -212,7 +230,8 @@ export async function status(): Promise<MonitoringStatus> {
         installed: !!version,
         port,
         running: procs.find((p) => p.name === PM2_NAMES[key])?.status === 'online' && (await portOpen('127.0.0.1', port, 500)),
-        url: `http://127.0.0.1:${port}`,
+        // Grafana and Prometheus open through Homeport, so they work from the LAN and public hostnames too.
+        url: key === 'grafana' ? '/grafana/' : key === 'prometheus' ? '/prometheus/' : `http://127.0.0.1:${port}`,
         pm2Name: PM2_NAMES[key],
       };
     }),
@@ -244,8 +263,8 @@ export async function status(): Promise<MonitoringStatus> {
     enabled: m.enabled,
     components,
     caddyMetrics: caddy.cachedMetricsMode() ?? 'unknown',
-    grafanaUrl: grafanaUrl(),
-    prometheusUrl: promUrl(),
+    grafanaUrl: '/grafana',
+    prometheusUrl: '/prometheus',
     alerts: alertList,
     targets,
   };
@@ -300,4 +319,22 @@ export function registerMonitoringHooks(): void {
   events.on('config:changed', () => {
     void reloadPrometheus();
   });
+}
+
+/**
+ * Monitoring processes started by older versions lack the flags for the /grafana and /prometheus
+ * proxy. Restart them once, with fresh arguments, after an upgrade.
+ */
+const LAYOUT = 2;
+export async function upgradeLayout(): Promise<void> {
+  if (!settings().monitoring.enabled) return;
+  const file = path.join(paths.monitoring, 'layout');
+  const current = Number(await fsp.readFile(file, 'utf8').catch(() => '1'));
+  if (current >= LAYOUT) return;
+  for (const key of ['prometheus', 'grafana'] as const) {
+    if (!(await versionOf(key))) continue;
+    await restartComponent(key).catch((e) => activity.warn(`Restarting ${key}: ${errMsg(e)}`));
+  }
+  await fsp.writeFile(file, String(LAYOUT));
+  activity.info('Grafana and Prometheus now open at /grafana and /prometheus, behind Homeport sign-in');
 }

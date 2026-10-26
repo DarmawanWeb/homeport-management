@@ -65,11 +65,15 @@ function Fields({
   set,
   creating,
   onNameTouched,
+  onHostTouched = () => {},
+  appDomain = '',
 }: {
   f: FormState;
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   creating: boolean;
   onNameTouched: () => void;
+  onHostTouched?: () => void;
+  appDomain?: string;
 }) {
   const { data: tunnels } = useTunnels();
   return (
@@ -112,8 +116,22 @@ function Fields({
       </div>
       {creating && (
         <div className="form-row">
-          <Field label="Domain" hint="Optional. A DNS record is created on Cloudflare." wide>
-            <input value={f.hostname} onChange={(e) => set('hostname', e.target.value)} placeholder="shop.example.com" autoComplete="off" />
+          <Field
+            label="Domain"
+            hint={
+              appDomain ? `Defaults to <name>.${appDomain}. Clear it for no domain.` : 'Optional. A DNS record is created on Cloudflare.'
+            }
+            wide
+          >
+            <input
+              value={f.hostname}
+              onChange={(e) => {
+                onHostTouched();
+                set('hostname', e.target.value);
+              }}
+              placeholder="shop.example.com"
+              autoComplete="off"
+            />
           </Field>
           <Field label="Tunnel">
             <select value={f.tunnel} onChange={(e) => set('tunnel', e.target.value)}>
@@ -206,6 +224,9 @@ function Fields({
 export function AppForm() {
   const { f, set } = useAppFormState();
   const [nameTouched, setNameTouched] = useState(false);
+  const [hostTouched, setHostTouched] = useState(false);
+  const { data: state } = useAppState();
+  const appDomain = state?.settings.appDomain ?? '';
   const { open } = useDialog();
   const report = useReport();
   const refresh = useRefresh();
@@ -214,6 +235,11 @@ export function AppForm() {
   useEffect(() => {
     if (!nameTouched && f.repo) set('name', nameFromRepo(f.repo));
   }, [f.repo, nameTouched, set]);
+
+  // Vercel-style default URL: <name>.<appDomain>, until the domain field is edited by hand.
+  useEffect(() => {
+    if (!hostTouched && appDomain) set('hostname', f.name ? `${f.name.replace(/[^a-z0-9-]/g, '-')}.${appDomain}` : '');
+  }, [f.name, appDomain, hostTouched, set]);
 
   const submit = async () => {
     const r = await post<{ app: AppView; deploy?: Deploy; site?: unknown; warning?: string }>('/api/apps', f);
@@ -226,7 +252,14 @@ export function AppForm() {
 
   return (
     <Modal title="Add an app" onSubmit={submit} submitLabel="Create and deploy">
-      <Fields f={f} set={set} creating onNameTouched={() => setNameTouched(true)} />
+      <Fields
+        f={f}
+        set={set}
+        creating
+        appDomain={appDomain}
+        onNameTouched={() => setNameTouched(true)}
+        onHostTouched={() => setHostTouched(true)}
+      />
     </Modal>
   );
 }

@@ -4,7 +4,7 @@ Homeport can be opened from anywhere, the way you would open a hosted platform's
 
 ![Sign-in page on a public hostname](/screenshots/login.png)
 
-## 1. Set a password
+## 1. Create your account
 
 The first time you open `http://127.0.0.1:7070` on the Mac, Homeport asks for a password before showing anything else. From any other computer (a NAS has no screen) the same screen also asks for the one-time **setup code** that Homeport prints to its log and writes to `data/setup-code`. Without it nobody can claim an unprotected dashboard, whether over the LAN or a tunnel.
 
@@ -35,6 +35,21 @@ The dashboard can run any build command on the Mac, so treat two-factor as requi
 | Headers | Strict CSP with no inline scripts, `frame-ancestors 'none'`, HSTS over HTTPS |
 
 Changing the password signs out every other device. **Signed-in devices** lists sessions with their address and lets you sign any of them out.
+
+## People and roles
+
+Everyone signs in with a **username** and password. Under **Access → People**, an admin can add more people:
+
+| Role | Can |
+|---|---|
+| Admin | Everything: deploy, change domains, tunnels and settings, manage people. Grafana admin. |
+| Viewer | Look at apps, deploys, logs, metrics and Grafana. Cannot change anything. Environment variables, tokens and webhook secrets are masked, and the backup export is closed. |
+
+Admins can set a new password for someone (they are signed out everywhere) or turn off two-factor for someone who lost their phone. There is always at least one admin, and nobody can delete their own account. Each person has their own two-factor, recovery codes and devices.
+
+Upgrading from a version without usernames turns the existing password into the account **`admin`**; rename it under **Your account**.
+
+![People on the Access page](/screenshots/people.png)
 
 ## Extra gate: Cloudflare Access
 

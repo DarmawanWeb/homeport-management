@@ -3,6 +3,7 @@ import {
   Boxes,
   Cable,
   Compass,
+  Eye,
   FileCode2,
   Globe,
   LogOut,
@@ -111,7 +112,7 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(currentTheme);
   const { data: auth } = useAuth();
-  const signedIn = auth?.passwordSet;
+  const signedIn = !!auth?.user;
   const signOut = async () => {
     await post('/api/auth/logout');
     location.reload();
@@ -186,6 +187,17 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
           ))}
         </nav>
         <div className="sidebar-foot">
+          {auth?.user && (
+            <div className="whoami">
+              <span className="avatar" aria-hidden="true">
+                {auth.user.username.slice(0, 1).toUpperCase()}
+              </span>
+              <div>
+                {auth.user.username}
+                <small>{auth.user.role === 'admin' ? 'Admin' : 'Viewer, read-only'}</small>
+              </div>
+            </div>
+          )}
           <section className="lights" aria-label="System status">
             {lights.map(([name, tone, text]) => (
               <div key={name}>
@@ -224,7 +236,14 @@ export function Shell({ route, children, onSearch }: { route: Route; children: R
             Search
           </Button>
         </header>
-        <main>{children}</main>
+        <main>
+          {auth?.user?.role === 'viewer' && (
+            <div className="viewer-bar">
+              <Eye /> You are signed in as a viewer. You can look around, but changes are turned off and secrets are hidden.
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

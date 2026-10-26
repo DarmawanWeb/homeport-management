@@ -84,6 +84,21 @@ export function Settings() {
                 <Button onClick={createHookDomain}>Create domain</Button>
               </div>
             </Field>
+            <Field
+              label="Default domain for apps"
+              hint={
+                <>
+                  Like <code>vercel.app</code>: a new app called <code>shop</code> gets <code>shop.{f.appDomain || 'example.com'}</code>{' '}
+                  automatically. Use a zone in your Cloudflare account.
+                </>
+              }
+            >
+              <input
+                value={f.appDomain}
+                onChange={(e) => set('appDomain', e.target.value.trim().toLowerCase())}
+                placeholder="example.com"
+              />
+            </Field>
             {text('appsDir', 'Apps folder', 'Each repository is cloned to a folder with the app name.')}
             <div className="form-row">
               {num('portRangeStart', 'First app port', 'New apps get the next free port from here.')}

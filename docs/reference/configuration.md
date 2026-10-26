@@ -15,7 +15,7 @@ Set in `ecosystem.config.cjs` for the `homeport` pm2 process, or as container en
 | `HOMEPORT_BIN` | `~/.homeport/bin` | Extra folder searched for caddy, cloudflared and the monitoring tools; `setup-linux.sh` installs there |
 | `HOMEPORT_FLAVOR` | detected | `mac`, `linux`, `synology` or `docker`; only changes install hints and texts |
 
-Everything else is in **Settings** and stored in `data/db.json`. The password, two-factor secret and sessions live in `data/auth.json` (mode 600), which is never included in exports.
+Everything else is in **Settings** and stored in `data/db.json`, including **Default domain for apps**: set it to a zone such as `example.com` and every new app gets `<name>.example.com`, the way Vercel gives each project a URL. The password, two-factor secret and sessions live in `data/auth.json` (mode 600), which is never included in exports.
 
 `npm run reset-password` clears `auth.json` and restarts Homeport.
 

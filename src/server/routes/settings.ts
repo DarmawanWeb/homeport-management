@@ -56,6 +56,7 @@ const settingsPatch = z
     caddyGlobalExtra: snippet,
     caddyRawAppend: snippet,
     webhookDomain: z.union([z.literal(''), hostname]),
+    appDomain: z.union([z.literal(''), hostname]),
     monitoring: z
       .object({
         prometheusBin: str.min(1),

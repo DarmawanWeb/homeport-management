@@ -1614,6 +1614,106 @@ input.otp {
   font: 500 var(--t-md) / 1.4 var(--font-code);
   counter-reset: code;
 }
+.avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sea-wash);
+  color: var(--sea);
+  font: 600 var(--t-sm) / 1 var(--font-display);
+}
+.account-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+.account-row .avatar {
+  width: 40px;
+  height: 40px;
+  font-size: var(--t-lg);
+  margin-bottom: 2px;
+}
+.account-row .field {
+  flex: 1;
+  max-width: 420px;
+}
+.account-row .badge {
+  margin-bottom: 9px;
+}
+.role-pick {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.role-pick legend {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.role-pick label {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+.role-pick label.on {
+  border-color: var(--sea);
+  box-shadow: var(--focus);
+}
+.role-pick input {
+  position: absolute;
+  opacity: 0;
+}
+.role-pick span {
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+.btn-row.end {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 32px;
+  background: var(--sea-wash);
+  color: var(--sea-strong);
+  font-size: var(--t-sm);
+  border-bottom: 1px solid color-mix(in srgb, var(--sea) 25%, transparent);
+}
+.viewer-bar svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.whoami {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 2px 8px;
+  font-size: var(--t-sm);
+}
+.whoami .avatar {
+  width: 26px;
+  height: 26px;
+  font-size: var(--t-xs);
+}
+.whoami small {
+  display: block;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+}
 .device {
   display: flex;
   gap: 10px;

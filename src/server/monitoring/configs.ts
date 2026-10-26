@@ -162,9 +162,11 @@ plugins = ${p.grafanaPlugins}
 provisioning = ${p.grafanaProvisioning}
 
 [server]
+; Only Homeport talks to Grafana; people open it at <dashboard>/grafana/.
 http_addr = 127.0.0.1
 http_port = ${m.grafanaPort}
-root_url = http://127.0.0.1:${m.grafanaPort}/
+root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
+serve_from_sub_path = true
 
 [security]
 admin_user = admin
@@ -172,9 +174,21 @@ admin_password = ${m.grafanaAdminPassword}
 allow_embedding = true
 cookie_samesite = lax
 
-[auth.anonymous]
+; Signed in by Homeport: it sends the username and role of whoever is using the dashboard.
+[auth.proxy]
 enabled = true
-org_role = Viewer
+header_name = X-WEBAUTH-USER
+header_property = username
+headers = Role:X-WEBAUTH-ROLE
+auto_sign_up = true
+whitelist = 127.0.0.1, ::1
+
+[auth]
+disable_login_form = true
+disable_signout_menu = true
+
+[auth.anonymous]
+enabled = false
 
 [users]
 default_theme = dark

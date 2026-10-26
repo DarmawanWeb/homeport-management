@@ -18,9 +18,16 @@ curl -s -X POST localhost:7070/api/apps/<id>/deploy -H 'X-Homeport: 1'
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/auth/status` | `passwordSet`, `authenticated`, `local`, `totpEnabled`, `publicUrls` (open) |
-| POST | `/api/auth/setup` | `{ password }`: first password; only on the Mac (open) |
-| POST | `/api/auth/login` | `{ password, code? }`; answers `401 { totpRequired: true }` when a code is needed (open) |
+| POST | `/api/auth/setup` | `{ username, password, setupCode? }`: first account (admin); only on the Mac (open) |
+| POST | `/api/auth/login` | `{ username, password, code? }`; answers `401 { totpRequired: true }` when a code is needed (open) |
 | POST | `/api/auth/logout` | End this session |
+| PUT | `/api/auth/me` | `{ username }`: rename yourself |
+| GET | `/api/auth/users` | People (admins only) |
+| POST | `/api/auth/users` | `{ username, password, role }` |
+| PUT | `/api/auth/users/:id` | `{ role }`; at least one admin stays |
+| POST | `/api/auth/users/:id/password` | `{ password }`; signs them out everywhere |
+| POST | `/api/auth/users/:id/reset-2fa` | Turn off their two-factor |
+| DELETE | `/api/auth/users/:id` | Delete and sign out |
 | POST | `/api/auth/password` | `{ current, next }`; signs out every other session |
 | POST | `/api/auth/totp/begin` | New secret, `otpauth://` URI and QR code SVG |
 | POST | `/api/auth/totp/enable` | `{ code }`; returns eight recovery codes |
@@ -37,9 +44,11 @@ curl -s -X POST localhost:7070/api/apps/<id>/deploy -H 'X-Homeport: 1'
 ```bash
 # script against the API from the Mac
 curl -s -c jar -X POST localhost:7070/api/auth/login -H 'X-Homeport: 1' -H 'Content-Type: application/json' \
-  -d '{"password":"…","code":"123456"}'
+  -d '{"username":"agus","password":"…","code":"123456"}'
 curl -s -b jar localhost:7070/api/apps
 ```
+
+Viewers get `403` on every change except their own password, two-factor and sessions, and secrets in responses are replaced by `••••`.
 
 ## Apps and deploys
 

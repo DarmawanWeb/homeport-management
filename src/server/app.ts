@@ -6,6 +6,7 @@ import { authPlugin } from './auth/index.js';
 import { paths } from './config.js';
 import { activity } from './lib/activity.js';
 import { HttpError } from './lib/errors.js';
+import { monitoringProxy, PROXIED } from './monitoring/proxy.js';
 import { appRoutes } from './routes/apps.js';
 import { infraRoutes } from './routes/infra.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -48,6 +49,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await authPlugin(app);
+  await monitoringProxy(app);
 
   await app.register(infraRoutes);
   await app.register(appRoutes);
@@ -66,6 +68,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   }
 
   app.addHook('onSend', async (req, reply, payload) => {
+    // Grafana and Prometheus bring their own headers; Homeport's strict CSP would break their pages.
+    if (PROXIED.test(req.url)) return payload;
     reply
       .header('X-Frame-Options', 'DENY')
       .header('X-Content-Type-Options', 'nosniff')

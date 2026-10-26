@@ -1,18 +1,32 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Download, ExternalLink, Globe2, KeyRound, Laptop, LogOut, ShieldAlert, ShieldCheck, Smartphone, Trash2, Wifi } from 'lucide-react';
+import {
+  Download,
+  ExternalLink,
+  Globe2,
+  KeyRound,
+  Laptop,
+  LogOut,
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  Trash2,
+  UserPlus,
+  Wifi,
+} from 'lucide-react';
 import { useState } from 'react';
-import type { SessionView } from '../../../src/shared/types';
+import type { SessionView, UserView } from '../../../src/shared/types';
 import { Badge, Button, CopyField, Empty, Field, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
-import { del, post } from '../lib/api';
+import { del, post, put } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago } from '../lib/format';
-import { useAuth, useNetwork, usePublicAccess, useSessions, useTunnels } from '../lib/queries';
+import { useAuth, useNetwork, usePublicAccess, useSessions, useTunnels, useUsers } from '../lib/queries';
 import { useReport, useToast } from '../lib/toast';
 import { StrengthMeter, strength } from './Auth';
 
 export function Access() {
   const { data: auth } = useAuth();
   if (!auth) return <Loading />;
+  const isAdmin = auth.user?.role !== 'viewer';
   return (
     <div className="page">
       <PageHead
@@ -30,8 +44,10 @@ export function Access() {
           )
         }
       />
-      <LocalNetwork />
-      <PublicAccess totpEnabled={auth.totpEnabled} />
+      {isAdmin && <LocalNetwork />}
+      {isAdmin && <PublicAccess totpEnabled={auth.totpEnabled} />}
+      {isAdmin && <Users />}
+      <YourAccount username={auth.user?.username ?? ''} role={auth.user?.role ?? 'admin'} />
       <div className="cols">
         <TwoFactor enabled={auth.totpEnabled} />
         <ChangePassword />
@@ -279,6 +295,270 @@ function PublicAccess({ totpEnabled }: { totpEnabled: boolean }) {
           Sign-ins over the public hostname use a secure cookie, are rate limited per address, and lock for everyone except this machine if
           many fail at once. For an extra gate in front, add a Cloudflare Access policy to the hostname.
         </p>
+      </div>
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------- accounts
+
+/** A strong random password to hand to someone: 24 characters in four groups. */
+function generatePassword(): string {
+  const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const chars = [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+  return chars.match(/.{6}/g)!.join('-');
+}
+
+const ROLE_HELP = {
+  admin: 'Everything: deploy, change domains and settings, manage people.',
+  viewer: 'Look only: apps, deploys, logs and metrics. Secrets are hidden.',
+};
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <span className="avatar" aria-hidden="true">
+      {name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+function UserForm({ onDone }: { onDone: () => void }) {
+  const [username, setUsername] = useState('');
+  const [role, setRole] = useState<'admin' | 'viewer'>('viewer');
+  const [pw, setPw] = useState(generatePassword);
+  const report = useToast();
+  return (
+    <Modal
+      title="Add a person"
+      submitLabel="Add"
+      onSubmit={async () => {
+        await post('/api/auth/users', { username, role, password: pw });
+        report(`${username} can sign in now. Send them the password over a private channel.`, 'ok', 8000);
+        onDone();
+      }}
+    >
+      <div className="form">
+        <Field label="Username">
+          {/* biome-ignore lint/a11y/noAutofocus: first field of the dialog */}
+          <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} autoComplete="off" autoFocus required />
+        </Field>
+        <fieldset className="role-pick">
+          <legend>Role</legend>
+          {(['viewer', 'admin'] as const).map((r) => (
+            <label key={r} className={role === r ? 'on' : ''}>
+              <input type="radio" name="role" checked={role === r} onChange={() => setRole(r)} />
+              <strong>{r === 'admin' ? 'Admin' : 'Viewer'}</strong>
+              <span>{ROLE_HELP[r]}</span>
+            </label>
+          ))}
+        </fieldset>
+        <Field label="Password" hint="Generated for you. They can change it after signing in.">
+          <div className="input-group">
+            <input className="code" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" />
+            <Button onClick={() => setPw(generatePassword())}>New</Button>
+            <Button
+              onClick={() => {
+                void navigator.clipboard.writeText(pw);
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+        </Field>
+        <StrengthMeter value={pw} />
+      </div>
+    </Modal>
+  );
+}
+
+function SetPasswordFor({ user, onDone }: { user: UserView; onDone: () => void }) {
+  const [pw, setPw] = useState(generatePassword);
+  const toast = useToast();
+  return (
+    <Modal
+      title={`New password for ${user.username}`}
+      submitLabel="Set password"
+      onSubmit={async () => {
+        await post(`/api/auth/users/${user.id}/password`, { password: pw });
+        toast(`${user.username} was signed out everywhere and needs the new password`, 'ok', 8000);
+        onDone();
+      }}
+    >
+      <Field label="Password" hint="They are signed out on every device.">
+        <CopyField value={pw} code />
+      </Field>
+      <div className="btn-row" style={{ marginTop: 10 }}>
+        <Button onClick={() => setPw(generatePassword())}>Generate another</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function Users() {
+  const { data } = useUsers();
+  const dialog = useDialog();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['auth'] });
+  const done = () => {
+    dialog.close();
+    void refresh();
+  };
+  const setRole = async (u: UserView, role: 'admin' | 'viewer') => {
+    await put(`/api/auth/users/${u.id}`, { role });
+    toast(`${u.username} is now ${role === 'admin' ? 'an admin' : 'a viewer'}`, 'ok');
+    await refresh();
+  };
+  const reset2fa = (u: UserView) =>
+    dialog.open(
+      <Modal
+        title={`Turn off two-factor for ${u.username}?`}
+        submitLabel="Turn off"
+        danger
+        onSubmit={async () => {
+          await post(`/api/auth/users/${u.id}/reset-2fa`);
+          toast(`${u.username} can sign in with just the password and set up two-factor again`, 'ok', 8000);
+          done();
+        }}
+      >
+        <p>For when someone lost their phone and their recovery codes. Ask them to set it up again right after signing in.</p>
+      </Modal>,
+    );
+  const remove = (u: UserView) =>
+    dialog.open(
+      <Modal
+        title={`Delete ${u.username}?`}
+        submitLabel="Delete"
+        danger
+        onSubmit={async () => {
+          await del(`/api/auth/users/${u.id}`);
+          toast(`${u.username} was deleted and signed out everywhere`, 'ok');
+          done();
+        }}
+      >
+        <p>They are signed out on every device and can no longer sign in.</p>
+      </Modal>,
+    );
+
+  return (
+    <Panel
+      title="People"
+      description="Everyone who can sign in. Admins can change things; viewers can only look."
+      flush
+      actions={
+        <Button variant="primary" size="sm" icon={<UserPlus />} onClick={() => dialog.open(<UserForm onDone={done} />)}>
+          Add person
+        </Button>
+      }
+    >
+      {!data ? (
+        <Loading />
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Person</th>
+              <th>Role</th>
+              <th className="hide-sm">Two-factor</th>
+              <th className="hide-sm">Last sign-in</th>
+              <th className="right">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <div className="device">
+                    <Avatar name={u.username} />
+                    <div>
+                      <strong>{u.username}</strong>
+                      {u.you && (
+                        <Badge tone="sea" light>
+                          You
+                        </Badge>
+                      )}
+                      <div className="sub">
+                        {u.sessions} device{u.sessions === 1 ? '' : 's'} signed in
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <Badge tone={u.role === 'admin' ? 'sea' : undefined}>{u.role === 'admin' ? 'Admin' : 'Viewer'}</Badge>
+                </td>
+                <td className="hide-sm">
+                  {u.totpEnabled ? (
+                    <Badge tone="ok" light>
+                      On
+                    </Badge>
+                  ) : (
+                    <Badge tone="warn" light>
+                      Off
+                    </Badge>
+                  )}
+                </td>
+                <td className="hide-sm nowrap">{u.lastSignInAt ? ago(u.lastSignInAt) : 'Never'}</td>
+                <td className="right">
+                  <div className="btn-row end">
+                    {!u.you && (
+                      <Button size="sm" variant="ghost" onClick={() => setRole(u, u.role === 'admin' ? 'viewer' : 'admin')}>
+                        {u.role === 'admin' ? 'Make viewer' : 'Make admin'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => dialog.open(<SetPasswordFor user={u} onDone={done} />)}>
+                      Password
+                    </Button>
+                    {u.totpEnabled && !u.you && (
+                      <Button size="sm" variant="ghost" onClick={() => reset2fa(u)}>
+                        Reset 2FA
+                      </Button>
+                    )}
+                    {!u.you && (
+                      <Button size="sm" variant="ghost" icon={<Trash2 />} iconOnly onClick={() => remove(u)}>
+                        Delete {u.username}
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
+  );
+}
+
+function YourAccount({ username, role }: { username: string; role: 'admin' | 'viewer' }) {
+  const [name, setName] = useState(username);
+  const toast = useToast();
+  const qc = useQueryClient();
+  const save = async () => {
+    await put('/api/auth/me', { username: name });
+    toast(`You are now ${name.trim().toLowerCase()}`, 'ok');
+    try {
+      localStorage.setItem('hp_username', name.trim().toLowerCase());
+    } catch {
+      /* private mode */
+    }
+    await qc.invalidateQueries({ queryKey: ['auth'] });
+  };
+  return (
+    <Panel title="Your account" description={ROLE_HELP[role]}>
+      <div className="account-row">
+        <Avatar name={username} />
+        <Field label="Username">
+          <div className="input-group">
+            <input value={name} onChange={(e) => setName(e.target.value.toLowerCase())} autoComplete="username" spellCheck={false} />
+            <Button onClick={save} disabled={!name || name === username}>
+              Rename
+            </Button>
+          </div>
+        </Field>
+        <Badge tone={role === 'admin' ? 'sea' : undefined}>{role === 'admin' ? 'Admin' : 'Viewer'}</Badge>
       </div>
     </Panel>
   );

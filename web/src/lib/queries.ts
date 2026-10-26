@@ -14,6 +14,7 @@ import type {
   StatusDTO,
   SystemDTO,
   TunnelView,
+  UserView,
 } from '../../../src/shared/types';
 import { get } from './api';
 
@@ -101,3 +102,4 @@ export const useAuth = () =>
 export const useSessions = () => useQuery({ queryKey: ['auth', 'sessions'], queryFn: () => get<SessionView[]>('/api/auth/sessions') });
 export const usePublicAccess = () => useQuery({ queryKey: ['auth', 'public'], queryFn: () => get<PublicAccessDTO>('/api/auth/public') });
 export const useNetwork = () => useQuery({ queryKey: ['auth', 'network'], queryFn: () => get<NetworkDTO>('/api/auth/network') });
+export const useUsers = () => useQuery({ queryKey: ['auth', 'users'], queryFn: () => get<UserView[]>('/api/auth/users') });

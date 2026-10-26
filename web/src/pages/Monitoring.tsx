@@ -1,9 +1,9 @@
-import { BellRing, ExternalLink, Power, RotateCw, ScrollText, ShieldCheck } from 'lucide-react';
+import { BellRing, ExternalLink, Power, RotateCw, ScrollText } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentKey } from '../../../src/shared/types';
 import { Pm2LogsDialog } from '../components/Logs';
-import { Badge, Button, CopyField, Empty, Field, Hint, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
-import { get, post } from '../lib/api';
+import { Badge, Button, Empty, Hint, Light, Loading, Notice, PageHead, Panel } from '../components/ui';
+import { post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago, fmtPct, fmtRate, fmtSeconds } from '../lib/format';
 import { useAppState, useMonitoring, useRefresh } from '../lib/queries';
@@ -48,23 +48,6 @@ export function Monitoring() {
     toast('Restarted', 'ok');
     setTimeout(() => void refresh('monitoring'), 2500);
   };
-  const creds = async () => {
-    const c = await get<{ user: string; password: string }>('/api/monitoring/credentials');
-    open(
-      <Modal title="Grafana admin sign-in">
-        <div className="form">
-          <Field label="Username">
-            <CopyField value={c.user} />
-          </Field>
-          <Field label="Password">
-            <CopyField value={c.password} code />
-          </Field>
-          <p className="hint">Dashboards are readable without signing in. The admin account is only for changing Grafana itself.</p>
-        </div>
-      </Modal>,
-    );
-  };
-
   const firing = m.alerts.filter((a) => a.state === 'firing');
   const pending = m.alerts.filter((a) => a.state === 'pending');
   const grafana = m.components.find((c) => c.key === 'grafana');
@@ -73,7 +56,7 @@ export function Monitoring() {
     <div className="page">
       <PageHead
         title="Monitoring"
-        description="Prometheus records how apps, Caddy, tunnels and this machine behave over time. Alerts go to Discord or Telegram, set up in Settings."
+        description="Prometheus records how apps, Caddy, tunnels and this machine behave over time. Grafana and Prometheus open through Homeport, already signed in as you, from any device that can reach this dashboard."
         actions={
           m.enabled ? (
             <>
@@ -145,11 +128,6 @@ export function Monitoring() {
                         >
                           Logs for {c.label}
                         </Button>
-                        {c.key === 'grafana' && (
-                          <Button size="sm" iconOnly icon={<ShieldCheck />} onClick={creds}>
-                            Admin sign-in
-                          </Button>
-                        )}
                       </>
                     )}
                   </div>

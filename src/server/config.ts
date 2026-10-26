@@ -98,6 +98,7 @@ export function defaultSettings(): Settings {
     appsDir: process.env.HOMEPORT_APPS_DIR || path.join(os.homedir(), 'apps'),
     webhookPort: 9000,
     webhookDomain: '',
+    appDomain: '',
     portRangeStart: 3001,
     tunnelMetricsPorts: {},
     monitoring: {

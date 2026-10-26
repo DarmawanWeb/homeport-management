@@ -1,4 +1,4 @@
-import { ChevronLeft, ExternalLink, Play, Rocket, RotateCw, Square, Trash2 } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Globe, Play, Rocket, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AppView } from '../../../src/shared/types';
 import { DeployStrip } from '../components/DeployStrip';
@@ -7,7 +7,7 @@ import { Badge, Button, CopyField, DeployBadge, Empty, Field, Loading, Modal, No
 import { del, get, post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago, fmtBytes, fmtDuration, fmtPct, fmtUptime, repoShort, shortSha } from '../lib/format';
-import { useApps, useCommits, useDeploys, useMonitoring, useRefresh } from '../lib/queries';
+import { useAppState, useApps, useCommits, useDeploys, useMonitoring, useRefresh } from '../lib/queries';
 import { type AppTab, href, navigate } from '../lib/router';
 import { useReport, useToast } from '../lib/toast';
 import { AppSettings } from './AppForm';
@@ -27,7 +27,9 @@ export function AppDetail({ id, tab }: { id: string; tab: AppTab }) {
   const app = data?.apps.find((a) => a.id === id || a.name === id);
   const deploy = useDeployAction();
   const toast = useToast();
+  const report = useReport();
   const refresh = useRefresh();
+  const { data: state } = useAppState();
 
   if (isLoading) return <Loading />;
   if (!app)
@@ -47,6 +49,20 @@ export function AppDetail({ id, tab }: { id: string; tab: AppTab }) {
     );
 
   const [tone, label] = appState(app);
+  const appDomain = state?.settings.appDomain;
+  const defaultHost = appDomain ? `${app.name.replace(/[^a-z0-9-]/g, '-')}.${appDomain}` : '';
+  const addDefaultDomain = async () => {
+    const r = await post('/api/sites', {
+      hostname: defaultHost,
+      upstreamPort: app.port,
+      pm2Name: app.name,
+      tunnel: state?.settings.defaultTunnel ?? '',
+      routeDns: true,
+      overwriteDns: false,
+    });
+    report(r, `${app.name} is live at https://${defaultHost}`);
+    await refresh();
+  };
   const act = async (action: 'restart' | 'stop' | 'start') => {
     await post(`/api/apps/${app.id}/${action}`);
     toast(`${app.name}: ${action === 'stop' ? 'stopped' : action === 'start' ? 'started' : 'restarted'}`, 'ok');
@@ -85,6 +101,17 @@ export function AppDetail({ id, tab }: { id: string; tab: AppTab }) {
         }
         actions={
           <>
+            {app.domains[0] ? (
+              <a className="btn" href={`https://${app.domains[0]}`} target="_blank" rel="noopener noreferrer">
+                <ExternalLink /> Visit
+              </a>
+            ) : (
+              defaultHost && (
+                <Button icon={<Globe />} onClick={addDefaultDomain}>
+                  Add {defaultHost}
+                </Button>
+              )
+            )}
             {app.pm2?.status === 'online' ? (
               <>
                 <Button icon={<RotateCw />} onClick={() => act('restart')}>

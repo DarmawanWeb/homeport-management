@@ -1,12 +1,12 @@
 import { buildApp } from './app.js';
 import { adoptEnvPassword } from './auth/index.js';
-import { loadAuth, prepareSetupCode } from './auth/store.js';
+import { loadAuth, prepareSetupCode, saveAuth, wasMigrated } from './auth/store.js';
 import { DATA_DIR, env, extendPath } from './config.js';
 import { activity } from './lib/activity.js';
 import { errMsg } from './lib/errors.js';
 import { startAlertLoop } from './monitoring/alerts.js';
 import { startExporter } from './monitoring/exporter.js';
-import { registerMonitoringHooks, writeConfigs } from './monitoring/service.js';
+import { registerMonitoringHooks, upgradeLayout, writeConfigs } from './monitoring/service.js';
 import { FLAVOR, FLAVOR_LABEL } from './platform.js';
 import { detectMetricsMode } from './services/caddy.js';
 import { markInterrupted, pollOnce } from './services/deploy.js';
@@ -21,6 +21,10 @@ async function main(): Promise<void> {
   loadDb();
   await saveDb();
   if (loadAuth().reset) activity.warn('Dashboard password and sessions were reset. Set a new password on this machine.');
+  if (wasMigrated()) {
+    await saveAuth();
+    activity.info('Your dashboard password now belongs to the account "admin". Rename it on the Access page.');
+  }
   await adoptEnvPassword();
   markInterrupted();
 
@@ -32,7 +36,10 @@ async function main(): Promise<void> {
   setInterval(() => void pollOnce().catch((e) => activity.error(`poll: ${errMsg(e)}`)), 15_000);
 
   void detectMetricsMode().then((m) => activity.info(`Caddy metrics: ${m}`));
-  if (settings().monitoring.enabled) await writeConfigs().catch((e) => activity.warn(`Monitoring config: ${errMsg(e)}`));
+  if (settings().monitoring.enabled) {
+    await writeConfigs().catch((e) => activity.warn(`Monitoring config: ${errMsg(e)}`));
+    void upgradeLayout().catch((e) => activity.warn(`Monitoring upgrade: ${errMsg(e)}`));
+  }
 
   const app = await buildApp();
   await app.listen({ host: env.host, port: env.port });

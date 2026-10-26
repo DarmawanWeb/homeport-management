@@ -40,6 +40,8 @@ Hosted platforms fix all of this, but they charge per app, sleep free services, 
 | A Caddyfile typo takes all sites down | Caddy validates the generated file before it replaces the running one |
 | `pm2 logs` over SSH | Logs, deploy history, metrics and alerts in one place |
 | Find out from users | Discord or Telegram when an app goes down, and again when it recovers |
+| One shared login, or SSH keys for everyone | People with usernames and roles: admins deploy, viewers only look (secrets masked) |
+| Pick a hostname for every project | A default domain: `shop` is live at `shop.yourdomain.com`, like a Vercel project URL |
 | SSH in to check a deploy | Open `mac-mini.local:7070` on your Wi-Fi, or `deploy.yourdomain.com` from anywhere, and sign in |
 
 ## Screenshots
@@ -54,6 +56,8 @@ Hosted platforms fix all of this, but they charge per app, sleep free services, 
 | **⌘K command palette** to jump to any page or app, or start a deploy. | **Night palette** taken from marine chart displays, following the system setting. |
 | ![Sign-in with two-factor](docs/public/screenshots/login-code.png) | ![Access page](docs/public/screenshots/access.png) |
 | **Sign in from anywhere.** Password plus a TOTP code; recovery codes if the phone is gone. | **Access.** Publish the dashboard on a hostname, manage two-factor, see and sign out devices. |
+| ![People and roles](docs/public/screenshots/people.png) | ![Viewer mode](docs/public/screenshots/viewer.png) |
+| **People.** Usernames, admin and viewer roles, per-person two-factor. | **Viewer mode.** Read-only, with environment variables and tokens masked. |
 
 ## How it works
 
@@ -87,6 +91,7 @@ Things that were harder than they looked, and how they were solved.
 - **One codebase, four platforms.** Homeport only drives CLIs, so macOS, Linux, Synology DSM and Docker differ in install hints and defaults, not code paths. A headless machine sets its first password with a one-time code from its own log. Homeport keeps pm2's saved process list in step with every change, so `pm2 resurrect` from launchd, systemd, DSM's Task Scheduler or the container entrypoint brings back exactly what was running. CI boots the image, sets it up from "another computer", restarts it and checks that everything came back.
 - **Monitoring checked in CI.** Every PromQL expression in the dashboards and alert rules is sent to a real Prometheus in CI, and the generated config goes through `promtool check config`. Renaming a metric can't quietly break a panel. ([decision 6](docs/decisions/0006-as-code.md))
 - **A public dashboard whose trust starts on the Mac.** The dashboard can be published like a hosted platform's, but only a request that is genuinely local (loopback socket, loopback `Host`, no proxy headers, which also defeats DNS rebinding) can set the first password or recover a lost one. Passwords are scrypt-hashed, two-factor is RFC 6238 TOTP with replay protection and single-use recovery codes, session tokens are stored only as hashes, and sign-in has per-address and global lockouts. An integration test drives the whole flow, from first setup through remote sign-in, code replay and password change. ([decision 7](docs/decisions/0007-public-dashboard))
+- **Grafana and Prometheus behind one login.** Both stay on `127.0.0.1`; Homeport proxies them at `/grafana` and `/prometheus` after its own session check and signs the user into Grafana through auth-proxy headers (spoofed headers dropped, session cookie never forwarded), mapping Homeport roles to Grafana roles. Prometheus's reload, quit and admin endpoints are blocked on the way.
 - **Small public surface.** Apps and the webhook path are public; the dashboard only if you publish it. The API binds to localhost, requires a custom header and matching Origin on every mutation (CSRF), sends a strict CSP, validates all input with Zod, and never builds shell strings from input. ([security model](docs/guide/security.md))
 
 ## Tech stack

@@ -19,6 +19,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [refetch]);
 
   const done = async () => {
+    // Came from /grafana or /prometheus without a session: go back there now.
+    const next = new URLSearchParams(location.search).get('next') ?? '';
+    if (/^\/(grafana|prometheus)(\/|$)/.test(next)) {
+      location.assign(next);
+      return;
+    }
     // Drop anything fetched while signed out, then load the dashboard fresh.
     qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'auth' });
     await refetch();
@@ -171,13 +177,15 @@ const ErrorLine = ({ children }: { children: string }) =>
 
 function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Promise<void> }) {
   const [code, setCode] = useState('');
+  const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const needCode = !auth.local;
   const machine = MACHINE[auth.flavor];
   const { busy, err, submit } = useSubmit(async () => {
     if (pw !== pw2) throw new Error('The two passwords do not match');
-    await post('/api/auth/setup', { password: pw, setupCode: needCode ? code : undefined });
+    await post('/api/auth/setup', { username, password: pw, setupCode: needCode ? code : undefined });
+    rememberUsername(username);
     await onDone();
   });
   return (
@@ -185,9 +193,9 @@ function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Prom
       <span className="auth-icon">
         <LockKeyhole />
       </span>
-      <h1>Set a dashboard password</h1>
+      <h1>Create your account</h1>
       <p className="auth-lede">
-        Homeport can run any command on this {machine}, so it needs a password before anything else. You only do this once.
+        Homeport can run any command on this {machine}, so it needs an account before anything else. You can add more people later.
       </p>
       <form className="form" onSubmit={submit}>
         {needCode && (
@@ -216,7 +224,21 @@ function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Prom
           </div>
         )}
         <label className="field">
-          <span>New password</span>
+          <span>Username</span>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+            placeholder="agus"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            pattern="[a-z0-9][a-z0-9._\-]{1,31}"
+            title="2 to 32 letters, digits, dots, dashes or underscores"
+            required
+          />
+        </label>
+        <label className="field">
+          <span>Password</span>
           <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" required />
         </label>
         <StrengthMeter value={pw} />
@@ -227,7 +249,7 @@ function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Prom
         <ErrorLine>{err}</ErrorLine>
         <button className="btn primary lg" type="submit" disabled={busy || strength(pw).score === 0}>
           {busy ? <span className="spin" /> : <ShieldCheck />}
-          Save password and continue
+          Create account and continue
         </button>
       </form>
       <p className="auth-foot">
@@ -247,7 +269,24 @@ const MACHINE: Record<AuthStatusDTO['flavor'], string> = {
   windows: 'PC',
 };
 
+const USER_KEY = 'hp_username';
+function rememberUsername(name: string) {
+  try {
+    localStorage.setItem(USER_KEY, name.trim().toLowerCase());
+  } catch {
+    /* private mode */
+  }
+}
+function lastUsername(): string {
+  try {
+    return localStorage.getItem(USER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 function LoginScreen({ onDone }: { onDone: () => Promise<void> }) {
+  const [username, setUsername] = useState(lastUsername);
   const [pw, setPw] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'password' | 'code'>('password');
@@ -256,7 +295,8 @@ function LoginScreen({ onDone }: { onDone: () => Promise<void> }) {
 
   const { busy, err, setErr, submit } = useSubmit(async () => {
     try {
-      await post('/api/auth/login', { password: pw, code: step === 'code' ? code : undefined });
+      await post('/api/auth/login', { username, password: pw, code: step === 'code' ? code : undefined });
+      rememberUsername(username);
       await onDone();
     } catch (x) {
       if (x instanceof ApiError && x.data.totpRequired) {
@@ -290,21 +330,39 @@ function LoginScreen({ onDone }: { onDone: () => Promise<void> }) {
       </p>
       <form className="form" onSubmit={submit}>
         {step === 'password' ? (
-          <label className="field">
-            <span>Password</span>
-            <input
-              type="password"
-              value={pw}
-              onChange={(e) => {
-                setPw(e.target.value);
-                setErr('');
-              }}
-              autoComplete="current-password"
-              required
-              // biome-ignore lint/a11y/noAutofocus: the only field on a sign-in screen
-              autoFocus
-            />
-          </label>
+          <>
+            <label className="field">
+              <span>Username</span>
+              <input
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setErr('');
+                }}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                // biome-ignore lint/a11y/noAutofocus: first field on a sign-in screen
+                autoFocus={!username}
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => {
+                  setPw(e.target.value);
+                  setErr('');
+                }}
+                autoComplete="current-password"
+                required
+                // biome-ignore lint/a11y/noAutofocus: the username is remembered, so start at the password
+                autoFocus={!!username}
+              />
+            </label>
+          </>
         ) : (
           <label className="field">
             <span>{recovery ? 'Recovery code' : 'Code'}</span>

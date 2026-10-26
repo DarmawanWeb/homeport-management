@@ -119,6 +119,8 @@ export interface Settings {
   appsDir: string;
   webhookPort: number;
   webhookDomain: string;
+  /** Like vercel.app: new apps default to <name>.<appDomain>. Empty for none. */
+  appDomain: string;
   portRangeStart: number;
   tunnelMetricsPorts: Record<string, number>;
   monitoring: MonitoringSettings;
@@ -274,6 +276,9 @@ export interface AuthStatusDTO {
   authenticated: boolean;
   /** The browser is on the Mac itself, not coming in through a public hostname. */
   local: boolean;
+  /** The signed-in account, if any. */
+  user: { id: string; username: string; role: 'admin' | 'viewer' } | null;
+  /** Two-factor is on for the signed-in account. */
   totpEnabled: boolean;
   flavor: Flavor;
   /** Where to read the one-time setup code, while no password exists. */
@@ -289,6 +294,19 @@ export interface SessionView {
   userAgent: string;
   via: 'local' | 'remote';
   current: boolean;
+}
+
+export interface UserView {
+  id: string;
+  username: string;
+  role: 'admin' | 'viewer';
+  totpEnabled: boolean;
+  recoveryCodesLeft: number;
+  createdAt: string;
+  lastSignInAt: string;
+  /** Signed-in devices. */
+  sessions: number;
+  you: boolean;
 }
 
 export interface PublicAccessDTO {
