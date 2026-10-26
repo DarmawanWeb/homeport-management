@@ -1,12 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Download, ExternalLink, Globe2, KeyRound, Laptop, LogOut, ShieldAlert, ShieldCheck, Smartphone, Trash2 } from 'lucide-react';
+import { Download, ExternalLink, Globe2, KeyRound, Laptop, LogOut, ShieldAlert, ShieldCheck, Smartphone, Trash2, Wifi } from 'lucide-react';
 import { useState } from 'react';
 import type { SessionView } from '../../../src/shared/types';
 import { Badge, Button, CopyField, Empty, Field, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
 import { del, post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago } from '../lib/format';
-import { useAuth, usePublicAccess, useSessions, useTunnels } from '../lib/queries';
+import { useAuth, useNetwork, usePublicAccess, useSessions, useTunnels } from '../lib/queries';
 import { useReport, useToast } from '../lib/toast';
 import { StrengthMeter, strength } from './Auth';
 
@@ -30,6 +30,7 @@ export function Access() {
           )
         }
       />
+      <LocalNetwork />
       <PublicAccess totpEnabled={auth.totpEnabled} />
       <div className="cols">
         <TwoFactor enabled={auth.totpEnabled} />
@@ -37,6 +38,141 @@ export function Access() {
       </div>
       <Sessions />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- local network
+
+const onThisMachine = () => ['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname);
+
+/** Wait for Homeport to come back after restarting itself, then reload the page. */
+async function waitForRestart(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 2500));
+  for (let i = 0; i < 40; i++) {
+    try {
+      const res = await fetch('/api/auth/status', { cache: 'no-store' });
+      if (res.ok) {
+        location.reload();
+        return;
+      }
+    } catch {
+      /* still restarting */
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+function LocalNetwork() {
+  const { data } = useNetwork();
+  const dialog = useDialog();
+  const toast = useToast();
+  const [restarting, setRestarting] = useState(false);
+  if (!data) return <Loading />;
+
+  const apply = async (lan: boolean) => {
+    await post('/api/auth/network', { lan });
+    setRestarting(true);
+    dialog.close();
+    toast(lan ? 'Opening the dashboard to your network. Homeport is restarting…' : 'Limiting the dashboard to this machine…', 'info', 8000);
+    if (lan || onThisMachine()) await waitForRestart();
+  };
+  const limit = () =>
+    dialog.open(
+      <Modal title="Limit the dashboard to this machine?" submitLabel="Limit and restart" danger onSubmit={() => apply(false)}>
+        <p>
+          {onThisMachine()
+            ? 'Other devices on your network will no longer reach the dashboard.'
+            : 'You are using it from another device right now, so this page will stop working. You would need the Mac itself, an SSH tunnel or a public hostname to get back in.'}
+        </p>
+      </Modal>,
+    );
+
+  return (
+    <Panel
+      title="Local network"
+      description="Open the dashboard from a laptop or phone on the same Wi-Fi or LAN, for a Mac without a screen or keyboard."
+      actions={
+        data.canChange &&
+        (data.lan ? (
+          <Button onClick={limit} disabled={restarting}>
+            Limit to this machine
+          </Button>
+        ) : (
+          <Button variant="primary" icon={<Wifi />} onClick={() => apply(true)} disabled={restarting}>
+            Allow devices on this network
+          </Button>
+        ))
+      }
+    >
+      <div className="public-access">
+        <div className="public-state">
+          {data.lan ? (
+            data.urls.length ? (
+              data.urls.map((u) => (
+                <div key={u} className="public-row">
+                  <Light tone="ok" label="Reachable" />
+                  <div className="grow">
+                    <a href={u} className="public-host">
+                      {u.replace(/^http:\/\//, '')} <ExternalLink />
+                    </a>
+                    <div className="sub">{/\.local:/.test(u) ? 'Bonjour name, works on Macs, iPhones and most PCs' : 'IP address'}</div>
+                  </div>
+                  <CopyButton value={u} />
+                </div>
+              ))
+            ) : (
+              <div className="public-row">
+                <Light tone="warn" label="No network" />
+                <div className="grow">
+                  <strong>Listening on {data.bind}, but no network address was found</strong>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="public-row muted">
+              <Light label="Private" />
+              <div className="grow">
+                <strong>Only this machine</strong>
+                <div className="sub">
+                  Reachable at http://127.0.0.1:{data.port}
+                  {data.urls[0] ? `. Once allowed, other devices use ${data.urls[0].replace(/^http:\/\//, '')}` : ''}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        {data.lan && data.firewall === 'on' && (
+          <Notice icon={<ShieldAlert />}>
+            The macOS firewall is on and may block other devices, and there is no screen to click Allow. Run this once over SSH:{' '}
+            <code>{data.firewallFix}</code>
+          </Notice>
+        )}
+        {!data.canChange && (
+          <p className="fine">
+            Homeport is not running under pm2 here, so it cannot restart itself. Set <code>HOST=0.0.0.0</code> and restart it.
+          </p>
+        )}
+        <p className="fine">
+          Devices on the network see the sign-in page and need your password (and two-factor code if it is on). Nothing is exposed to the
+          internet by this; for that, use a public hostname below.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const toast = useToast();
+  return (
+    <Button
+      size="sm"
+      onClick={() => {
+        void navigator.clipboard.writeText(value);
+        toast('Copied', 'ok', 1500);
+      }}
+    >
+      Copy
+    </Button>
   );
 }
 

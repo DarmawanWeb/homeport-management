@@ -5,6 +5,7 @@ import type {
   AuthStatusDTO,
   Deploy,
   MonitoringStatus,
+  NetworkDTO,
   Pm2Proc,
   PublicAccessDTO,
   QueryRangeDTO,
@@ -99,3 +100,4 @@ export const useAuth = () =>
   useQuery({ queryKey: ['auth'], queryFn: () => get<AuthStatusDTO>('/api/auth/status'), retry: 2, staleTime: 30_000 });
 export const useSessions = () => useQuery({ queryKey: ['auth', 'sessions'], queryFn: () => get<SessionView[]>('/api/auth/sessions') });
 export const usePublicAccess = () => useQuery({ queryKey: ['auth', 'public'], queryFn: () => get<PublicAccessDTO>('/api/auth/public') });
+export const useNetwork = () => useQuery({ queryKey: ['auth', 'network'], queryFn: () => get<NetworkDTO>('/api/auth/network') });

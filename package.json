@@ -1,6 +1,6 @@
 {
   "name": "homeport",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Self-hosted deploy platform for a Mac mini: git push deploys with rollback, pm2, Caddy, Cloudflare Tunnel, Prometheus and Grafana.",
   "main": "dist/server/index.js",
   "scripts": {

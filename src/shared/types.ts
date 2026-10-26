@@ -296,3 +296,18 @@ export interface PublicAccessDTO {
   defaultTunnel: string;
   dashboardPort: number;
 }
+
+export interface NetworkDTO {
+  /** Address the dashboard is bound to right now. */
+  bind: string;
+  /** Reachable from other devices on the network. */
+  lan: boolean;
+  port: number;
+  /** Addresses other devices can use (Bonjour name first, then IPs). */
+  urls: string[];
+  /** Homeport runs under pm2 and can restart itself to apply a change. */
+  canChange: boolean;
+  /** macOS application firewall state, or null when not applicable. */
+  firewall: 'on' | 'off' | null;
+  firewallFix: string;
+}

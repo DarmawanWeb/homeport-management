@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,8 +11,30 @@ export const IS_MAC = process.platform === 'darwin';
 export const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 export const DATA_DIR = path.resolve(process.env.TM_DATA_DIR || path.join(ROOT, 'data'));
 
+const LISTEN_FILE = path.join(DATA_DIR, 'network.json');
+
+/**
+ * Where the dashboard listens. The choice made in the dashboard (data/network.json) wins over HOST,
+ * so it survives pm2 restarts, reboots and re-running the installer.
+ */
+function listenHost(): string {
+  try {
+    const pref = (JSON.parse(fs.readFileSync(LISTEN_FILE, 'utf8')) as { listen?: string }).listen;
+    if (pref === 'lan') return '0.0.0.0';
+    if (pref === 'local') return '127.0.0.1';
+  } catch {
+    /* no preference saved */
+  }
+  return process.env.HOST || '127.0.0.1';
+}
+
+export function writeListenPreference(listen: 'lan' | 'local'): void {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(LISTEN_FILE, `${JSON.stringify({ listen }, null, 2)}\n`);
+}
+
 export const env = {
-  host: process.env.HOST || '127.0.0.1',
+  host: listenHost(),
   port: Number(process.env.PORT || 7070),
   password: process.env.TM_PASSWORD || '',
 };

@@ -46,13 +46,32 @@ Old config files are archived to `~/homeport-reset-backup-*.tgz`.
 
 ## Open the dashboard
 
-The dashboard only listens on `127.0.0.1:7070`. On the Mac itself, open <http://127.0.0.1:7070>. From another computer, forward the port over SSH and open <http://localhost:17070>:
+A Mac mini used as a server usually has no screen or keyboard, so `setup-mac.sh` opens the dashboard to your local network on the first install and prints where to find it:
 
-```bash
-ssh -N -L 17070:127.0.0.1:7070 you@mac-mini.local
+```
+✓ Done. Open Homeport from any device on your network:
+    http://mac-mini.local:7070
+    http://192.168.1.20:7070
+
+  First visit: set a dashboard password. From another device, enter this setup code:
+    JUB6-FQC6-PIOE-LHQI
 ```
 
-The first visit asks you to **set a dashboard password**. This only works on the Mac or through an SSH forward like the one above, never through a public hostname. Later you can [publish the dashboard](/guide/public-dashboard) on a domain of your own and open it from anywhere.
+Open either address from a laptop or phone on the same Wi-Fi or LAN. The first visit asks for the **setup code** and a new **dashboard password**; after that, every device signs in with the password. Lost the code? Over SSH, run `pm2 logs homeport` or `cat ~/homeport/data/setup-code`.
+
+The `.local` name works on Macs, iPhones and most PCs without any setup. If it does not resolve, use the IP address, and consider a DHCP reservation in your router so it never changes.
+
+**Firewall.** If the macOS firewall is on, it would show an "allow incoming connections" prompt that nobody can click. The installer and the Access page print the command that allows Node once, over SSH.
+
+**This Mac only.** To keep the dashboard on `127.0.0.1`, run `bash setup-mac.sh --local-only`, or use **Access → Local network → Limit to this machine**. You can then still reach it through an SSH tunnel:
+
+```bash
+ssh -N -L 17070:127.0.0.1:7070 you@mac-mini.local   # then open http://localhost:17070
+```
+
+The choice is saved in `data/network.json`, so it survives restarts, reboots and re-running the installer. Later you can also [publish the dashboard](/guide/public-dashboard) on a domain and open it from anywhere.
+
+![Local network on the Access page](/screenshots/access-lan.png)
 
 ## First run
 

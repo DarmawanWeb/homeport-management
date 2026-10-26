@@ -7,6 +7,7 @@ import { activity } from '../lib/activity.js';
 import { badRequest, HttpError, notFound, parse } from '../lib/errors.js';
 import { hostname } from '../lib/validators.js';
 import { FLAVOR } from '../platform.js';
+import { networkInfo, setLanAccess } from '../services/network.js';
 import { createSite, deleteSite } from '../services/sites.js';
 import { db, settings } from '../store.js';
 import { type ClientInfo, LoginLimiter, requestClient, sameOrigin } from './guard.js';
@@ -326,6 +327,17 @@ export async function authPlugin(app: FastifyInstance): Promise<void> {
     await saveAuth();
     activity.info(`Signed out ${n} other session(s)`);
     return { revoked: n };
+  });
+
+  // ---------------------------------------------------------------- local network
+
+  app.get('/api/auth/network', async () => networkInfo());
+  app.post('/api/auth/network', async (req) => {
+    const { lan } = parse(z.object({ lan: z.boolean() }), req.body);
+    if (lan && !passwordSet()) throw badRequest('Set a dashboard password first');
+    setLanAccess(lan);
+    activity.info(lan ? 'Dashboard opened to the local network; restarting' : 'Dashboard limited to this machine; restarting');
+    return { ok: true, restarting: true };
   });
 
   // ---------------------------------------------------------------- public access

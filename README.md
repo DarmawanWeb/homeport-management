@@ -40,7 +40,7 @@ Hosted platforms fix all of this, but they charge per app, sleep free services, 
 | A Caddyfile typo takes all sites down | Caddy validates the generated file before it replaces the running one |
 | `pm2 logs` over SSH | Logs, deploy history, metrics and alerts in one place |
 | Find out from users | Discord or Telegram when an app goes down, and again when it recovers |
-| SSH in to check a deploy | Open `deploy.yourdomain.com` from your phone, sign in with password and authenticator code |
+| SSH in to check a deploy | Open `mac-mini.local:7070` on your Wi-Fi, or `deploy.yourdomain.com` from anywhere, and sign in |
 
 ## Screenshots
 
@@ -108,7 +108,7 @@ Things that were harder than they looked, and how they were solved.
 git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
 cd ~/homeport
 bash setup-mac.sh          # installs Caddy, cloudflared, pm2, Prometheus, Grafana; builds and starts Homeport
-open http://127.0.0.1:7070   # set a password, then optionally publish it under Access
+# then open the printed http://mac-mini.local:7070 from any laptop or phone on your Wi-Fi
 ```
 
 **Synology NAS** (Container Manager → Project, or any Docker host)

@@ -29,6 +29,8 @@ curl -s -X POST localhost:7070/api/apps/<id>/deploy -H 'X-Homeport: 1'
 | GET | `/api/auth/sessions` | Signed-in devices |
 | DELETE | `/api/auth/sessions/:id` | Sign one out |
 | POST | `/api/auth/sessions/revoke-others` | Sign out everything but this session |
+| GET | `/api/auth/network` | Bind address, LAN URLs, macOS firewall state |
+| POST | `/api/auth/network` | `{ lan: boolean }`; saves the choice and restarts Homeport under pm2 |
 | GET / POST | `/api/auth/public` | List, or `{ hostname, tunnel? }` to publish the dashboard |
 | DELETE | `/api/auth/public/:id?dns=1` | Unpublish |
 

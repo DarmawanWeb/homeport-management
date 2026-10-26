@@ -6,7 +6,7 @@ Set in `ecosystem.config.cjs` for the `homeport` pm2 process, or as container en
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HOST` | `127.0.0.1` (`0.0.0.0` in Docker and from `setup-linux.sh`) | Dashboard bind address. Remote browsers always need the password, or the setup code before one exists |
+| `HOST` | `127.0.0.1` (`0.0.0.0` in Docker and from `setup-linux.sh`) | Dashboard bind address, used when `data/network.json` has no choice saved. Access → Local network and `setup-mac.sh --lan` / `--local-only` save one. Remote browsers always need the password, or the setup code before one exists |
 | `PORT` | `7070` | Dashboard and API port |
 | `TM_PASSWORD` | unset | Deprecated. If set and no password exists yet, it is imported once as the dashboard password |
 | `TM_DATA_DIR` | `./data` | Where state and generated files live |
