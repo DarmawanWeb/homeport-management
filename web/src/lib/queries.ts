@@ -13,6 +13,7 @@ import type {
   StateDTO,
   StatusDTO,
   SystemDTO,
+  TailscaleDTO,
   TunnelView,
   UserView,
 } from '../../../src/shared/types';
@@ -103,3 +104,4 @@ export const useSessions = () => useQuery({ queryKey: ['auth', 'sessions'], quer
 export const usePublicAccess = () => useQuery({ queryKey: ['auth', 'public'], queryFn: () => get<PublicAccessDTO>('/api/auth/public') });
 export const useNetwork = () => useQuery({ queryKey: ['auth', 'network'], queryFn: () => get<NetworkDTO>('/api/auth/network') });
 export const useUsers = () => useQuery({ queryKey: ['auth', 'users'], queryFn: () => get<UserView[]>('/api/auth/users') });
+export const useTailscale = () => useQuery({ queryKey: ['auth', 'tailscale'], queryFn: () => get<TailscaleDTO>('/api/auth/tailscale') });

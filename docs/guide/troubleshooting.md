@@ -32,6 +32,15 @@ Edit the domain and turn on *Replace an existing DNS record*.
 **Everything restarted with the name `homeport`**
 Fixed in 3.1.0. Older versions inherited pm2's own environment, and pm2 7 read the inherited `name` instead of `--name`. Update, then remove the extra entries with `pm2 delete <id>`.
 
+**Apps show as stopped, or "could not parse pm2 output"**
+pm2 was upgraded without restarting its daemon, so it prints *In-memory PM2 is out-of-date*. Homeport copes with that since 3.7.0, but run `pm2 update` once to clear it.
+
+**"Reload already in progress"**
+pm2 runs one reload at a time. Since 3.7.0 Homeport queues its own reloads and retries if something else is reloading; on older versions, deploy again.
+
+**A monorepo package builds but `next start` warns about `output: standalone`**
+Harmless. The app is served by `next start`; the standalone output is only used by Docker images.
+
 **Port already in use when starting Caddy or Grafana**
 Another copy runs as a Homebrew service. `brew services stop caddy grafana prometheus node_exporter`.
 

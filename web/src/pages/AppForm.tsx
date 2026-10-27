@@ -22,6 +22,8 @@ interface FormState {
   installCmd: string;
   buildCmd: string;
   startCmd: string;
+  workspace: string;
+  submodules: 'pinned' | 'latest';
   gitToken: string;
   maxMemory: string;
   healthTimeout: number;
@@ -55,6 +57,8 @@ function useAppFormState(app?: AppView) {
     gitToken: app?.gitToken ?? '',
     maxMemory: app?.maxMemory ?? '',
     healthTimeout: app?.healthTimeout ?? 40,
+    workspace: app?.workspace ?? '',
+    submodules: app?.submodules ?? 'pinned',
   }));
   const set = useCallback(<K extends keyof FormState>(k: K, v: FormState[K]) => setF((s) => (s[k] === v ? s : { ...s, [k]: v })), []);
   return { f, set, setF };
@@ -112,6 +116,32 @@ function Fields({
           }
         >
           <input type="number" min={1} max={65535} value={f.port} onChange={(e) => set('port', Number(e.target.value))} required />
+        </Field>
+      </div>
+      <div className="form-row">
+        <Field
+          label="Package (monorepos)"
+          hint={
+            <>
+              For Turborepo, pnpm, npm or yarn workspaces: the package to run, like <code>@acme/web</code> or <code>apps/web</code>. Blank
+              for a single app. Git submodules are fetched automatically.
+            </>
+          }
+          wide
+        >
+          <input
+            value={f.workspace}
+            onChange={(e) => set('workspace', e.target.value.trim())}
+            placeholder="apps/web"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+        <Field label="Submodules">
+          <select value={f.submodules} onChange={(e) => set('submodules', e.target.value as FormState['submodules'])}>
+            <option value="pinned">Commits the repo pins</option>
+            <option value="latest">Latest on their branch</option>
+          </select>
         </Field>
       </div>
       {creating && (
@@ -233,8 +263,12 @@ export function AppForm() {
   const toast = useToast();
 
   useEffect(() => {
-    if (!nameTouched && f.repo) set('name', nameFromRepo(f.repo));
-  }, [f.repo, nameTouched, set]);
+    if (!nameTouched && f.repo) {
+      // One repo can hold several apps: name each after its package, e.g. dctedu-store.
+      const pkg = f.workspace.split('/').filter(Boolean).pop() ?? '';
+      set('name', pkg ? `${nameFromRepo(f.repo)}-${pkg.toLowerCase().replace(/[^a-z0-9._-]/g, '-')}`.slice(0, 40) : nameFromRepo(f.repo));
+    }
+  }, [f.repo, f.workspace, nameTouched, set]);
 
   // Vercel-style default URL: <name>.<appDomain>, until the domain field is edited by hand.
   useEffect(() => {

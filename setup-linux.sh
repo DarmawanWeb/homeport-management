@@ -178,7 +178,9 @@ if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g --prefix "$NPM_PREFIX" pm2 --no-audit --no-fund
 fi
 echo "  ✓ pm2 $(pm2 --version 2>/dev/null | tail -1)"
-command -v corepack >/dev/null 2>&1 && { corepack enable --install-directory "$NPM_PREFIX/bin" >/dev/null 2>&1 || true; }
+# Node 25 and newer no longer bundle corepack, which provides pnpm and yarn for monorepos.
+command -v corepack >/dev/null 2>&1 || npm install -g --prefix "$NPM_PREFIX" corepack --no-audit --no-fund >/dev/null
+corepack enable --install-directory "$NPM_PREFIX/bin" >/dev/null 2>&1 || true
 if ! pm2 ls 2>/dev/null | grep -q pm2-logrotate; then
   pm2 install pm2-logrotate >/dev/null
   pm2 set pm2-logrotate:max_size 10M >/dev/null

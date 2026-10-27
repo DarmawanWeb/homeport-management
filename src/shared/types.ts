@@ -39,6 +39,10 @@ export interface App {
   installCmd: string;
   buildCmd: string;
   startCmd: string;
+  /** Monorepos: the workspace package to run (name like @scope/web, or folder like apps/web). */
+  workspace: string;
+  /** Git submodules at the commits the repository pins, or at the tip of their branches. */
+  submodules: 'pinned' | 'latest';
   env: Record<string, string>;
   autoDeploy: AutoDeploy;
   pollInterval: number;
@@ -471,4 +475,16 @@ export interface NetworkStatsDTO {
     checkedAt: number | null;
   };
   tunnels: { name: string; connections: number; edges: string[] }[];
+}
+
+export interface TailscaleDTO {
+  installed: boolean;
+  running: boolean;
+  state: string;
+  /** mac-mini.tailnet-abc.ts.net */
+  dnsName: string | null;
+  ip: string | null;
+  tailnet: string | null;
+  /** The HTTPS address serving the dashboard, when `tailscale serve` is on. */
+  serving: string | null;
 }

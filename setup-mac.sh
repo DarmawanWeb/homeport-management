@@ -52,6 +52,8 @@ if (( NODE_MAJOR < 20 )); then y "Node $NODE_MAJOR is too old; Homeport needs 20
 
 g "▸ pm2, corepack (pnpm and yarn), pm2-logrotate"
 command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+# Node 25 and newer no longer bundle corepack, which provides pnpm and yarn for monorepos.
+command -v corepack >/dev/null 2>&1 || npm install -g corepack --no-audit --no-fund >/dev/null
 corepack enable >/dev/null 2>&1 || true
 if ! pm2 ls 2>/dev/null | grep -q pm2-logrotate; then
   pm2 install pm2-logrotate >/dev/null
@@ -123,4 +125,7 @@ if [[ -f "$CODE_FILE" ]]; then
   echo "    $(cat "$CODE_FILE")"
 fi
 [[ $LISTEN == lan ]] || echo "  (this Mac only; run with --lan to open it to your network)"
+echo
+echo "  From outside your network: Access → Private access with Tailscale (only your devices),"
+echo "  or Access → Public dashboard (your own domain through the Cloudflare tunnel, with two-factor)."
 

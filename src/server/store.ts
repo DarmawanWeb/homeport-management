@@ -46,7 +46,7 @@ export function loadDb(): void {
     const raw = JSON.parse(fs.readFileSync(paths.db, 'utf8')) as Partial<DbShape>;
     db.settings = mergeSettings(raw.settings);
     db.sites = raw.sites ?? [];
-    db.apps = (raw.apps ?? []).map((a) => ({ ...a, env: a.env ?? {} }));
+    db.apps = (raw.apps ?? []).map((a) => ({ ...a, env: a.env ?? {}, workspace: a.workspace ?? '', submodules: a.submodules ?? 'pinned' }));
     db.deploys = raw.deploys ?? [];
     db.version = SCHEMA_VERSION;
   } catch (e) {

@@ -107,11 +107,12 @@ describe('deploy helpers', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-'));
     fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ scripts: { build: 'tsc', start: 'node dist' } }));
     fs.writeFileSync(path.join(dir, 'pnpm-lock.yaml'), '');
-    expect(detectProject(dir)).toEqual({
+    expect(detectProject(dir)).toMatchObject({
       pm: 'pnpm',
       install: 'pnpm install --frozen-lockfile',
       build: 'pnpm run build',
-      start: 'pnpm start',
+      start: 'pnpm run start',
+      workspace: null,
     });
     fs.rmSync(path.join(dir, 'pnpm-lock.yaml'));
     fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}');

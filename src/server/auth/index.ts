@@ -11,6 +11,7 @@ import { PROXIED } from '../monitoring/proxy.js';
 import { FLAVOR } from '../platform.js';
 import { networkInfo, setLanAccess } from '../services/network.js';
 import { createSite, deleteSite } from '../services/sites.js';
+import { setTailscaleServe, tailscaleStatus } from '../services/tailscale.js';
 import { db, settings } from '../store.js';
 import { type ClientInfo, LoginLimiter, requestClient, sameOrigin } from './guard.js';
 import {
@@ -557,6 +558,17 @@ export async function authPlugin(app: FastifyInstance): Promise<void> {
     setLanAccess(lan);
     activity.info(lan ? 'Dashboard opened to the local network; restarting' : 'Dashboard limited to this machine; restarting');
     return { ok: true, restarting: true };
+  });
+
+  // ---------------------------------------------------------------- Tailscale (private access)
+
+  app.get('/api/auth/tailscale', async () => tailscaleStatus());
+  app.post('/api/auth/tailscale', async (req) => {
+    requireAdmin(req);
+    const { on } = parse(z.object({ on: z.boolean() }), req.body);
+    const r = await setTailscaleServe(on);
+    activity.info(on ? `Dashboard served on your tailnet at ${r.serving ?? 'Tailscale'}` : 'Stopped serving the dashboard on Tailscale');
+    return r;
   });
 
   // ---------------------------------------------------------------- public access

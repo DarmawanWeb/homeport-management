@@ -1,6 +1,27 @@
 # Public dashboard
 
-Homeport can be opened from anywhere, the way you would open a hosted platform's dashboard, while still running on the Mac. The dashboard gets a hostname on your Cloudflare zone and comes in through the same tunnel as your apps. No router ports are opened.
+Homeport can be opened from anywhere, the way you would open a hosted platform's dashboard, while still running on the Mac. There are two ways, both without opening router ports:
+
+| | Tailscale (private) | Public hostname (Cloudflare Tunnel) |
+|---|---|---|
+| Address | `https://mac-mini.<tailnet>.ts.net` | `https://deploy.example.com` |
+| Who can reach the sign-in page | Only devices signed in to your Tailscale account | Anyone on the internet |
+| Needs | Tailscale on the Mac and on your phone or laptop | A domain on Cloudflare and a tunnel (you already have both for your apps) |
+| Recommended for | Managing the machine | Sharing with people who cannot install Tailscale |
+
+Homeport's sign-in and two-factor apply either way.
+
+## Private access with Tailscale
+
+1. Install Tailscale on the Mac (`brew install --cask tailscale`, or from tailscale.com) and sign in. Install it on your phone and laptop with the same account.
+2. In the Tailscale admin console, under **DNS**, turn on **MagicDNS** and **HTTPS certificates** (once per tailnet).
+3. In Homeport: **Access → Private access with Tailscale → Serve on my tailnet**.
+
+Homeport runs `tailscale serve --bg --https=443 http://127.0.0.1:7070`. The dashboard keeps listening on `127.0.0.1` only; Tailscale terminates HTTPS and forwards to it, and requests that arrive this way are treated as remote, so they always need a sign-in.
+
+## Public hostname
+
+The dashboard gets a hostname on your Cloudflare zone and comes in through the same tunnel as your apps.
 
 ![Sign-in page on a public hostname](/screenshots/login.png)
 

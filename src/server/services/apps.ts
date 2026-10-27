@@ -30,6 +30,15 @@ const appInput = z.object({
   installCmd: z.string().trim().default(''),
   buildCmd: z.string().trim().default(''),
   startCmd: z.string().trim().default(''),
+  workspace: z
+    .string()
+    .trim()
+    .default('')
+    .refine(
+      (v) => v === '' || (/^(@[a-z0-9._-]+\/)?[a-zA-Z0-9._/-]+$/.test(v) && !v.includes('..')),
+      'Use a package name like @scope/web or a folder like apps/web',
+    ),
+  submodules: z.enum(['pinned', 'latest']).default('pinned'),
   env: envMap,
   autoDeploy: z.enum(['webhook', 'poll', 'off']).default('webhook'),
   pollInterval: z.coerce.number().int().min(30, 'The check interval is at least 30 seconds').default(60),

@@ -14,12 +14,12 @@ import {
   Wifi,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { SessionView, UserView } from '../../../src/shared/types';
+import type { SessionView, TailscaleDTO, UserView } from '../../../src/shared/types';
 import { Badge, Button, CopyField, Empty, Field, Light, Loading, Modal, Notice, PageHead, Panel } from '../components/ui';
 import { del, post, put } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago } from '../lib/format';
-import { useAuth, useNetwork, usePublicAccess, useSessions, useTunnels, useUsers } from '../lib/queries';
+import { useAuth, useNetwork, usePublicAccess, useSessions, useTailscale, useTunnels, useUsers } from '../lib/queries';
 import { useReport, useToast } from '../lib/toast';
 import { StrengthMeter, strength } from './Auth';
 
@@ -45,6 +45,7 @@ export function Access() {
         }
       />
       {isAdmin && <LocalNetwork />}
+      {isAdmin && <PrivateTailscale />}
       {isAdmin && <PublicAccess totpEnabled={auth.totpEnabled} />}
       {isAdmin && <Users />}
       <YourAccount username={auth.user?.username ?? ''} role={auth.user?.role ?? 'admin'} />
@@ -189,6 +190,86 @@ function CopyButton({ value }: { value: string }) {
     >
       Copy
     </Button>
+  );
+}
+
+// ---------------------------------------------------------------- Tailscale
+
+function PrivateTailscale() {
+  const { data } = useTailscale();
+  const qc = useQueryClient();
+  const toast = useToast();
+  if (!data) return null;
+  const set = async (on: boolean) => {
+    const r = await post<TailscaleDTO>('/api/auth/tailscale', { on });
+    qc.setQueryData(['auth', 'tailscale'], r);
+    toast(on ? `Homeport is on your tailnet at ${r.serving}` : 'No longer served on Tailscale', 'ok');
+  };
+  return (
+    <Panel
+      title="Private access with Tailscale"
+      description="The safest way in from anywhere: an HTTPS address that only your own devices on Tailscale can open. Nothing is exposed to the internet."
+      actions={
+        data.running &&
+        (data.serving ? (
+          <Button onClick={() => set(false)}>Stop serving</Button>
+        ) : (
+          <Button variant="primary" icon={<ShieldCheck />} onClick={() => set(true)}>
+            Serve on my tailnet
+          </Button>
+        ))
+      }
+    >
+      <div className="public-access">
+        <div className="public-state">
+          {!data.installed ? (
+            <div className="public-row muted">
+              <Light label="Not installed" />
+              <div className="grow">
+                <strong>Tailscale is not installed on this machine</strong>
+                <div className="sub">
+                  Install it (<code>brew install --cask tailscale</code> or tailscale.com/download), sign in, and install it on your phone
+                  and laptop with the same account. Then come back here.
+                </div>
+              </div>
+            </div>
+          ) : !data.running ? (
+            <div className="public-row muted">
+              <Light tone="warn" label={data.state} />
+              <div className="grow">
+                <strong>Tailscale is installed but not connected ({data.state})</strong>
+                <div className="sub">Open Tailscale on this machine and sign in, or run tailscale up.</div>
+              </div>
+            </div>
+          ) : data.serving ? (
+            <div className="public-row">
+              <Light tone="ok" label="Serving" />
+              <div className="grow">
+                <a href={data.serving} target="_blank" rel="noreferrer" className="public-host">
+                  {data.serving.replace(/^https:\/\//, '')} <ExternalLink />
+                </a>
+                <div className="sub">HTTPS on {data.tailnet ?? 'your tailnet'}. Devices outside it cannot even reach the sign-in page.</div>
+              </div>
+              <CopyButton value={data.serving} />
+            </div>
+          ) : (
+            <div className="public-row muted">
+              <Light label="Connected" />
+              <div className="grow">
+                <strong>Connected as {data.dnsName}</strong>
+                <div className="sub">
+                  {data.ip ? `Tailscale address ${data.ip}. ` : ''}Press Serve to give the dashboard a private HTTPS address.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <p className="fine">
+          Homeport's sign-in and two-factor still apply on top. Prefer this over a public hostname for managing the machine; keep public
+          hostnames for the apps your visitors use.
+        </p>
+      </div>
+    </Panel>
   );
 }
 

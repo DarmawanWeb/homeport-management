@@ -19,6 +19,9 @@ import { expectRestart } from '../lib/restarts.js';
 import { RE_SHA } from '../lib/validators.js';
 import { db, saveDb, settings } from '../store.js';
 import * as pm2 from './pm2.js';
+import { detectProject, withPackageManager } from './project.js';
+
+export { detectProject } from './project.js';
 
 type Log = (text: string) => void;
 
@@ -55,55 +58,10 @@ export async function remoteHead(a: App): Promise<{ sha: string | null; error?: 
 
 // ---------------------------------------------------------------- project detection
 
-export interface Detected {
-  pm: 'npm' | 'pnpm' | 'yarn' | 'bun';
-  install: string;
-  build: string;
-  start: string;
-}
-
 /** Infer install/build/start commands from package.json and the lockfile. */
-export function detectProject(dir: string): Detected {
-  const has = (f: string) => fs.existsSync(path.join(dir, f));
-  let pkg: { scripts?: Record<string, string>; main?: string } | null = null;
-  try {
-    pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
-  } catch {
-    /* not a node project */
-  }
-  const pm: Detected['pm'] = has('pnpm-lock.yaml')
-    ? 'pnpm'
-    : has('yarn.lock')
-      ? 'yarn'
-      : has('bun.lockb') || has('bun.lock')
-        ? 'bun'
-        : 'npm';
-  const install = !pkg
-    ? ''
-    : pm === 'npm'
-      ? has('package-lock.json') || has('npm-shrinkwrap.json')
-        ? 'npm ci'
-        : 'npm install'
-      : pm === 'pnpm'
-        ? 'pnpm install --frozen-lockfile'
-        : pm === 'yarn'
-          ? 'yarn install --frozen-lockfile'
-          : 'bun install';
-  const build = pkg?.scripts?.build ? `${pm} run build` : '';
-  const start = pkg?.scripts?.start
-    ? `${pm} start`
-    : pkg?.main
-      ? `node ${pkg.main}`
-      : has('index.js')
-        ? 'node index.js'
-        : has('server.js')
-          ? 'node server.js'
-          : '';
-  return { pm, install, build, start };
-}
-
 /** Pure: app + start command → pm2 ecosystem file contents. */
 export function generateEcosystem(a: App, dir: string, startCmd: string, pathEnv = process.env.PATH ?? ''): string {
+  // `dir` is where the app runs: the repository, or the workspace package inside it.
   const parts = splitCommand(startCmd);
   if (!parts.length) throw new Error('Start command is empty');
   let [script, ...args] = parts as [string, ...string[]];
@@ -158,21 +116,59 @@ async function checkout(a: App, target: string | null, log: Log): Promise<void> 
   const ref = target ?? `origin/${a.branch}`;
   await step(log, 'git checkout', 'git', ['checkout', '-q', '-B', a.branch, ref], { cwd: dir });
   await step(log, 'git reset', 'git', ['reset', '--hard', ref], { cwd: dir });
+  await updateSubmodules(a, dir, log);
+}
+
+/**
+ * Monorepos often keep their apps as git submodules. Fetch them on every deploy, at the commits the
+ * repository pins ("pinned") or at the tip of each submodule's branch ("latest"). The access token,
+ * if any, is passed the same way as for the main repository, so private submodules on the same host work.
+ */
+async function updateSubmodules(a: App, dir: string, log: Log): Promise<void> {
+  if (!fs.existsSync(path.join(dir, '.gitmodules'))) return;
+  await step(log, 'git submodule sync', 'git', ['submodule', 'sync', '--recursive'], { cwd: dir });
+  const args = ['submodule', 'update', '--init', '--recursive', '--force', ...(a.submodules === 'latest' ? ['--remote'] : [])];
+  await step(log, 'submodules', 'git', [...gitAuthArgs(a), ...args], {
+    cwd: dir,
+    display: `git ${args.join(' ')}`,
+    timeout: 10 * 60_000,
+  });
+}
+
+// pm2 handles one reload at a time across the whole daemon: a second one fails with "Reload already in
+// progress". Apps from one repository (a monorepo) deploy together on every push, so take turns here.
+let pm2Turn: Promise<unknown> = Promise.resolve();
+function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  const next = pm2Turn.then(fn, fn);
+  pm2Turn = next.catch(() => undefined);
+  return next;
 }
 
 async function startOrReload(a: App, log: Log): Promise<void> {
-  const exists = !!(await pm2.find(a.name));
-  const args = exists ? ['reload', ecosystemFile(a), '--update-env'] : ['start', ecosystemFile(a)];
-  log(`\n▸ pm2 ${exists ? 'reload' : 'start'}\n$ pm2 ${args.join(' ')}\n`);
-  const r = await pm2.pm2(args, { timeout: 90_000, quiet: true });
-  pm2.invalidate();
-  log(
-    `${stripAnsi(`${r.stdout}${r.stderr}`)
-      .split('\n')
-      .filter((l) => /\[PM2\]|rror/.test(l))
-      .join('\n')}\n`,
-  );
-  if (!r.ok) throw new Error(`pm2 failed: ${(r.stderr || r.stdout).trim().split('\n').slice(-3).join(' ')}`);
+  await inTurn(async () => {
+    for (let attempt = 1; ; attempt++) {
+      const exists = !!(await pm2.find(a.name));
+      const args = exists ? ['reload', ecosystemFile(a), '--update-env'] : ['start', ecosystemFile(a)];
+      log(`\n▸ pm2 ${exists ? 'reload' : 'start'}\n$ pm2 ${args.join(' ')}\n`);
+      const r = await pm2.pm2(args, { timeout: 90_000, quiet: true });
+      pm2.invalidate();
+      const out = stripAnsi(`${r.stdout}${r.stderr}`);
+      log(
+        `${out
+          .split('\n')
+          .filter((l) => /\[PM2\]|rror/.test(l))
+          .join('\n')}\n`,
+      );
+      if (r.ok && !/already in progress/i.test(out)) return;
+      // Another process (perhaps started outside Homeport) is mid-reload: wait for it and try again.
+      if (/already in progress/i.test(out) && attempt < 8) {
+        log('  another reload is running; trying again in 5 s\n');
+        await sleep(5000);
+        continue;
+      }
+      throw new Error(`pm2 failed: ${(r.stderr || r.stdout).trim().split('\n').slice(-3).join(' ')}`);
+    }
+  });
 }
 
 async function waitHealthy(a: App, log: Log): Promise<void> {
@@ -200,15 +196,40 @@ async function waitHealthy(a: App, log: Log): Promise<void> {
   throw new Error(`The app did not start listening on port ${a.port}. Make sure it reads process.env.PORT.`);
 }
 
+/** Is a command on PATH (as the child processes will see it)? */
+async function onPath(cmd: string): Promise<boolean> {
+  return (await run('sh', ['-c', `command -v ${cmd}`], { quiet: true, timeout: 5000, env: childEnv() })).ok;
+}
+
+/** Non-interactive, quiet builds: no corepack download prompt, no git hooks, no telemetry. */
+const BUILD_ENV = {
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+  HUSKY: '0',
+  NEXT_TELEMETRY_DISABLED: '1',
+  TURBO_TELEMETRY_DISABLED: '1',
+  TURBO_NO_UPDATE_NOTIFIER: '1',
+  NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+};
+
 async function buildAndRun(a: App, rec: Deploy, log: Log): Promise<void> {
   const dir = appDir(a);
-  const d = detectProject(dir);
-  const install = a.installCmd === '-' ? '' : a.installCmd || d.install;
-  const build = a.buildCmd === '-' ? '' : a.buildCmd || d.build;
-  const start = a.startCmd || d.start;
+  const d = detectProject(dir, { workspace: a.workspace, port: a.port });
+  if (d.workspace)
+    log(
+      `\n▸ Monorepo package ${d.workspace.name} (${path.relative(dir, d.workspace.dir) || '.'})${d.turbo ? ', built with Turborepo' : ''}\n`,
+    );
+  const available =
+    d.pm === 'npm' || d.pm === 'bun' ? { pm: true, corepack: true } : { pm: await onPath(d.pm), corepack: await onPath('corepack') };
+  const pmCmd = (c: string) => withPackageManager(c, d.pm, d.pmSpec, available);
+  const install = a.installCmd === '-' ? '' : pmCmd(a.installCmd || d.install);
+  const build = a.buildCmd === '-' ? '' : pmCmd(a.buildCmd || d.build);
+  const start = pmCmd(a.startCmd || d.start);
   rec.commands = { install, build, start };
-  if (!start) throw new Error('Could not work out a start command (package.json has no "start" script). Set one in the app settings.');
-  const appEnv = { ...a.env, PORT: String(a.port) };
+  if (!start)
+    throw new Error(
+      `Could not work out a start command (${d.workspace ? d.workspace.name : 'package.json'} has no "start" script). Set one in the app settings.`,
+    );
+  const appEnv = { ...a.env, ...BUILD_ENV, PORT: String(a.port) };
   // devDependencies are needed to build, so NODE_ENV=production must not be set during install.
   if (install) {
     const env = childEnv(appEnv, { keepNodeEnv: false });
@@ -222,7 +243,7 @@ async function buildAndRun(a: App, rec: Deploy, log: Log): Promise<void> {
       env: childEnv({ NODE_ENV: 'production', ...appEnv }),
       timeout: 30 * 60_000,
     });
-  await fsp.writeFile(ecosystemFile(a), generateEcosystem(a, dir, start));
+  await fsp.writeFile(ecosystemFile(a), generateEcosystem(a, d.startDir, start));
   await startOrReload(a, log);
   await waitHealthy(a, log);
 }

@@ -42,6 +42,16 @@ interface RawProc {
 let cache: { at: number; value: { list: Pm2Proc[]; error: string | null } } | null = null;
 
 /** List pm2 processes. Cached for 2s because many endpoints ask at once. */
+/**
+ * `pm2 jlist` can print notices before the JSON: "[PM2][WARN] …", or ">>>> In-memory PM2 is
+ * out-of-date" when the CLI and the daemon versions differ. The JSON is the line that starts with
+ * `[{` or `[]`. Exported for tests.
+ */
+export function jsonPart(stdout: string): string {
+  const m = /^\[(\{|\s*\])/m.exec(stdout);
+  return m ? stdout.slice(m.index) : stdout;
+}
+
 export async function list(fresh = false): Promise<{ list: Pm2Proc[]; error: string | null }> {
   if (!fresh && cache && Date.now() - cache.at < 2000) return cache.value;
   const r = await pm2(['jlist'], { timeout: 20_000, quiet: true });
@@ -50,7 +60,7 @@ export async function list(fresh = false): Promise<{ list: Pm2Proc[]; error: str
     value = { list: [], error: r.notFound ? 'pm2 was not found' : (r.stderr || 'pm2 jlist failed').trim() };
   } else {
     try {
-      const raw = JSON.parse(r.stdout.slice(r.stdout.indexOf('['))) as RawProc[];
+      const raw = JSON.parse(jsonPart(r.stdout)) as RawProc[];
       value = {
         error: null,
         list: raw.map((p) => {
@@ -68,7 +78,8 @@ export async function list(fresh = false): Promise<{ list: Pm2Proc[]; error: str
         }),
       };
     } catch {
-      value = { list: [], error: 'could not parse pm2 output' };
+      const first = r.stdout.trim().split('\n')[0]?.slice(0, 120) ?? '';
+      value = { list: [], error: `could not parse pm2 output${first ? `: ${first}` : ''}` };
     }
   }
   cache = { at: Date.now(), value };
