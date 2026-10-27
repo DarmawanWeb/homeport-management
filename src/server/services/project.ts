@@ -136,6 +136,16 @@ export function detectProject(dir: string, opts: { workspace?: string; port?: nu
     const names = workspacePackages(dir).map((p) => p.name);
     throw new Error(`No workspace package "${opts.workspace}"${names.length ? `. Packages here: ${names.join(', ')}` : ''}`);
   }
+  // A monorepo root usually cannot run on its own (DCTEdu: `turbo run start` with no start task).
+  // Say which package to pick instead of letting pm2 crash-loop.
+  if (!ws && root) {
+    const rootStart = root.scripts?.start ?? '';
+    const apps = workspacePackages(dir).filter((p) => readPkg(p.dir)?.scripts?.start);
+    if (apps.length && (!rootStart || /^(turbo|nx|lerna)\b/.test(rootStart.trim())))
+      throw new Error(
+        `This repository is a monorepo. Edit the app and set "Package (monorepos)" to the app to run: ${apps.map((p) => p.name).join(', ')}. Make one Homeport app per package.`,
+      );
+  }
   const pkg = ws ? readPkg(ws.dir) : root;
   const startDir = ws?.dir ?? dir;
   const next = usesNext(pkg);

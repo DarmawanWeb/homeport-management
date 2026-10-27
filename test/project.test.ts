@@ -68,6 +68,18 @@ describe('monorepos', () => {
     expect(() => detectProject(monorepo(), { workspace: '@dctedu/shop' })).toThrow(/Packages here: @dctedu\/api, @dctedu\/simulator/);
   });
 
+  it('asks for a package instead of starting a monorepo root that cannot run', () => {
+    const root = monorepo();
+    expect(() => detectProject(root, { port: 3002 })).toThrow(/monorepo.*@dctedu\/api, @dctedu\/simulator, @dctedu\/store/);
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    pkg.scripts.start = 'turbo run start';
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(pkg));
+    expect(() => detectProject(root, { port: 3002 })).toThrow(/Package \(monorepos\)/);
+    pkg.scripts.start = 'node server.js';
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(pkg));
+    expect(detectProject(root, { port: 3002 }).startDir).toBe(root);
+  });
+
   it('falls back to corepack or npx when pnpm is not installed', () => {
     expect(withPackageManager('pnpm install --frozen-lockfile', 'pnpm', 'pnpm@10.28.0', { pm: true, corepack: true })).toBe(
       'pnpm install --frozen-lockfile',
