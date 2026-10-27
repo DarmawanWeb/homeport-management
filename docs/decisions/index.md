@@ -11,3 +11,4 @@ Short records of the choices that shaped Homeport, the alternatives considered, 
 | 5 | [A JSON file as the database](/decisions/0005-json-store) | Tens of records, one writer, human-readable backups |
 | 6 | [Dashboards and diagrams as code](/decisions/0006-as-code) | Generated from the same source as the metrics, so they cannot drift |
 | 7 | [Public dashboard, local-first trust](/decisions/0007-public-dashboard) | Reachable like a hosted platform, but only the Mac itself can set it up or recover it |
+| 8 | [Analytics from the proxy log, privacy first](/decisions/0008-privacy-first-analytics) | Caddy's log and Cloudflare's headers, daily-salted visitor IDs, hourly counts only |

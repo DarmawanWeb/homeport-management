@@ -19,6 +19,9 @@ function mergeSettings(stored: Partial<Settings> | undefined): Settings {
     tunnelMetricsPorts: { ...(s.tunnelMetricsPorts ?? {}) },
     monitoring: { ...d.monitoring, ...(s.monitoring ?? {}) },
     notify: { ...d.notify, ...(s.notify ?? {}) },
+    analytics: { ...d.analytics, ...(s.analytics ?? {}) },
+    uptime: { ...d.uptime, ...(s.uptime ?? {}) },
+    statusPage: { ...d.statusPage, ...(s.statusPage ?? {}) },
   };
 }
 
@@ -26,7 +29,16 @@ function mergeSettings(stored: Partial<Settings> | undefined): Settings {
 export const db: DbShape = emptyDb();
 
 export function loadDb(): void {
-  for (const dir of [DATA_DIR, paths.tunnels, paths.backups, paths.ecosystem, paths.deployLogs, paths.monitoring]) {
+  for (const dir of [
+    DATA_DIR,
+    paths.tunnels,
+    paths.backups,
+    paths.ecosystem,
+    paths.deployLogs,
+    paths.monitoring,
+    paths.analytics,
+    paths.uptime,
+  ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
   if (!fs.existsSync(paths.db)) return;

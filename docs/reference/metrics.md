@@ -38,6 +38,15 @@ Homeport serves Prometheus metrics on `127.0.0.1:9101/metrics`. Values are refre
 
 `homeport_host_cpu_usage_ratio`, `homeport_host_memory_used_bytes` (excludes reclaimable cache; read from `vm_stat` on macOS), `homeport_host_memory_total_bytes`, `homeport_host_load{period}`, `homeport_host_cpu_count`, `homeport_host_disk_total_bytes`, `homeport_host_disk_available_bytes` (the volume holding the apps folder).
 
+## Network
+
+| Metric | Type | Labels |
+|---|---|---|
+| `homeport_network_receive_bytes_total` | gauge (counter value) | iface |
+| `homeport_network_transmit_bytes_total` | gauge (counter value) | iface |
+| `homeport_internet_up` | gauge | |
+| `homeport_internet_latency_seconds` | gauge | |
+
 ## Scraped from other components
 
 - **Caddy** at its admin address: `caddy_http_requests_total`, `caddy_http_request_duration_seconds` and friends, labelled by `host` on Caddy 2.9 and newer.

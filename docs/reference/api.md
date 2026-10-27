@@ -50,6 +50,16 @@ curl -s -b jar localhost:7070/api/apps
 
 Viewers get `403` on every change except their own password, two-factor and sessions, and secrets in responses are replaced by `••••`.
 
+## Analytics, uptime and network
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/analytics?range=1h\|24h\|7d\|30d&host=all\|<domain>` | Totals with the previous period, series, countries, cities, pages, sources, devices, browsers, OS, status codes, live view |
+| GET | `/api/uptime` | Per domain: state, last check, uptime 24 h / 7 d / 30 d, 90 daily bars; incidents; status page settings |
+| POST | `/api/uptime/check` | Check every domain now |
+| GET | `/api/network/stats` | Interfaces, throughput, internet latency and loss, public IP and Cloudflare location, tunnel edges |
+| GET | `/api/public/status` | The public status page data; open without sign-in, `404` while the page is off |
+
 ## Apps and deploys
 
 | Method | Path | Purpose |

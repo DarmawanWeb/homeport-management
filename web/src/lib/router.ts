@@ -12,11 +12,28 @@ export type Route =
   | { page: 'caddyfile' }
   | { page: 'activity' }
   | { page: 'settings' }
-  | { page: 'access' };
+  | { page: 'access' }
+  | { page: 'analytics' }
+  | { page: 'uptime' }
+  | { page: 'network' };
 
 export type AppTab = 'deploys' | 'logs' | 'metrics' | 'settings' | 'webhook';
 const APP_TABS: AppTab[] = ['deploys', 'logs', 'metrics', 'settings', 'webhook'];
-const SIMPLE = ['overview', 'apps', 'domains', 'tunnels', 'services', 'monitoring', 'caddyfile', 'activity', 'settings', 'access'] as const;
+const SIMPLE = [
+  'overview',
+  'apps',
+  'domains',
+  'tunnels',
+  'services',
+  'monitoring',
+  'caddyfile',
+  'activity',
+  'settings',
+  'access',
+  'analytics',
+  'uptime',
+  'network',
+] as const;
 
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);

@@ -6,6 +6,7 @@ import { badRequest, parse } from '../lib/errors.js';
 import { bracesBalanced, hostname, port, RE_PM2NAME, RE_TUNNEL } from '../lib/validators.js';
 import { startExporter } from '../monitoring/exporter.js';
 import { reloadPrometheus } from '../monitoring/service.js';
+import * as caddy from '../services/caddy.js';
 import { listZones } from '../services/cloudflareApi.js';
 import * as notify from '../services/notify.js';
 import { startWebhookServer } from '../services/webhooks.js';
@@ -70,6 +71,11 @@ const settingsPatch = z
         retention: str.regex(/^\d+[dhwy]$/, 'Retention looks like 30d'),
       })
       .partial(),
+    analytics: z.object({ enabled: z.boolean(), retentionDays: z.number().int().min(1).max(730) }).partial(),
+    uptime: z
+      .object({ enabled: z.boolean(), mode: z.enum(['public', 'local']), intervalSec: z.number().int().min(30).max(3600) })
+      .partial(),
+    statusPage: z.object({ enabled: z.boolean(), title: str.max(80), hosts: z.array(hostname).max(50) }).partial(),
     notify: z
       .object({
         discordWebhook: str.refine(
@@ -90,8 +96,11 @@ const settingsPatch = z
   .partial();
 
 function applyPatch(st: Settings, p: z.infer<typeof settingsPatch>): void {
-  const { monitoring, notify: n, cfApiToken, ...rest } = p;
+  const { monitoring, notify: n, cfApiToken, analytics, uptime, statusPage, ...rest } = p;
   Object.assign(st, rest);
+  if (analytics) Object.assign(st.analytics, analytics);
+  if (uptime) Object.assign(st.uptime, uptime);
+  if (statusPage) Object.assign(st.statusPage, statusPage);
   if (cfApiToken !== undefined && !isMasked(cfApiToken)) st.cfApiToken = cfApiToken;
   if (monitoring) Object.assign(st.monitoring, monitoring);
   if (n) {
@@ -106,7 +115,12 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   app.put('/api/settings', async (req) => {
     const patch = parse(settingsPatch, req.body);
     const st = settings();
-    const before = { webhookPort: st.webhookPort, metricsPort: st.monitoring.metricsPort, monitoring: JSON.stringify(st.monitoring) };
+    const before = {
+      webhookPort: st.webhookPort,
+      metricsPort: st.monitoring.metricsPort,
+      monitoring: JSON.stringify(st.monitoring),
+      analytics: st.analytics.enabled,
+    };
     applyPatch(st, patch);
     const ports = [
       st.caddyHttpPort,
@@ -123,6 +137,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     if (st.webhookPort !== before.webhookPort) startWebhookServer();
     if (st.monitoring.metricsPort !== before.metricsPort) startExporter();
     if (JSON.stringify(st.monitoring) !== before.monitoring) await reloadPrometheus();
+    if (st.analytics.enabled !== before.analytics) {
+      // Turns Caddy's access log on or off.
+      await caddy
+        .writeCaddyfile()
+        .then(() => caddy.reload())
+        .catch((e) => activity.warn(`Caddy: ${(e as Error).message}`));
+    }
     return { settings: publicSettings() };
   });
 

@@ -9,6 +9,8 @@ interface Props {
   height?: number;
   min?: number;
   empty?: string;
+  /** Axis and readout labels for time; defaults to hh:mm. */
+  timeFormat?: (t: number) => string;
 }
 
 const PAD = { l: 52, r: 10, t: 10, b: 22 };
@@ -23,7 +25,14 @@ function niceMax(v: number): number {
 const timeLabel = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /** Small dependency-free time-series chart with a hover readout. */
-export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min = 0, empty = 'Belum ada data' }: Props) {
+export function Chart({
+  series,
+  format = (v) => v.toFixed(1),
+  height = 160,
+  min = 0,
+  empty = 'No data yet',
+  timeFormat = timeLabel,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -92,10 +101,10 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
           </g>
         ))}
         <text x={PAD.l} y={height - 5} className="axis">
-          {timeLabel(t0)}
+          {timeFormat(t0)}
         </text>
         <text x={W - PAD.r} y={height - 5} textAnchor="end" className="axis">
-          {timeLabel(t1)}
+          {timeFormat(t1)}
         </text>
         {series.map((s, i) => {
           const color = PALETTE[i % PALETTE.length];
@@ -124,7 +133,7 @@ export function Chart({ series, format = (v) => v.toFixed(1), height = 160, min 
               {r.label} <b>{format(r.v)}</b>
             </span>
           ))}
-        {readout?.[0] && <span className="sub">{timeLabel(readout[0].t)}</span>}
+        {readout?.[0] && <span className="sub">{timeFormat(readout[0].t)}</span>}
       </div>
     </div>
   );

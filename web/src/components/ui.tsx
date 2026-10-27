@@ -315,4 +315,4 @@ export function Modal({
 
 /** An install hint: shown as a command when it is one, as plain text when it is advice. */
 export const Hint = ({ text }: { text?: string }) =>
-  text && /^(brew|bash|sudo|winget|xcode-select|npm|docker)\b/.test(text) ? <code>{text}</code> : <>{text}</>;
+  text && /^(brew|bash|sudo|winget|xcode-select|npm|docker)\b/.test(text) ? <code>{text}</code> : (text ?? null);

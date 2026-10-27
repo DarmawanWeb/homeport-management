@@ -9,6 +9,7 @@ import { HttpError } from './lib/errors.js';
 import { monitoringProxy, PROXIED } from './monitoring/proxy.js';
 import { appRoutes } from './routes/apps.js';
 import { infraRoutes } from './routes/infra.js';
+import { observeRoutes } from './routes/observe.js';
 import { settingsRoutes } from './routes/settings.js';
 
 // React sets inline style attributes, so styles allow 'unsafe-inline'; scripts do not.
@@ -54,6 +55,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(infraRoutes);
   await app.register(appRoutes);
   await app.register(settingsRoutes);
+  await app.register(observeRoutes);
 
   if (fs.existsSync(paths.web)) {
     // wildcard: serve files that appear after a rebuild without restarting; misses fall through to the SPA handler.

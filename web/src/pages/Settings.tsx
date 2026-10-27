@@ -107,6 +107,54 @@ export function Settings() {
           </div>
         </Panel>
 
+        <Panel title="Analytics and uptime" description="Visitor statistics from Caddy's access log, and checks that your domains answer.">
+          <div className="form">
+            <Switch
+              checked={f.analytics.enabled}
+              onChange={(v) => setF({ ...f, analytics: { ...f.analytics, enabled: v } })}
+              hint="Caddy writes an access log for public domains; Homeport keeps only hourly counts. No cookies, no IP addresses stored."
+            >
+              Traffic analytics
+            </Switch>
+            <Field label="Keep analytics for (days)">
+              <input
+                type="number"
+                min={1}
+                max={730}
+                value={f.analytics.retentionDays}
+                onChange={(e) => setF({ ...f, analytics: { ...f.analytics, retentionDays: Number(e.target.value) } })}
+              />
+            </Field>
+            <Switch
+              checked={f.uptime.enabled}
+              onChange={(v) => setF({ ...f, uptime: { ...f.uptime, enabled: v } })}
+              hint="Down and back-up messages go to the notification channels below."
+            >
+              Uptime checks
+            </Switch>
+            <div className="form-row">
+              <Field label="Check through">
+                <select
+                  value={f.uptime.mode}
+                  onChange={(e) => setF({ ...f, uptime: { ...f.uptime, mode: e.target.value as 'public' | 'local' } })}
+                >
+                  <option value="public">The internet (https://domain, end to end)</option>
+                  <option value="local">Caddy on this machine only</option>
+                </select>
+              </Field>
+              <Field label="Every (seconds)">
+                <input
+                  type="number"
+                  min={30}
+                  max={3600}
+                  value={f.uptime.intervalSec}
+                  onChange={(e) => setF({ ...f, uptime: { ...f.uptime, intervalSec: Number(e.target.value) } })}
+                />
+              </Field>
+            </div>
+          </div>
+        </Panel>
+
         <Panel title="Notifications" description="Deploy results and alerts, sent where you already look.">
           <div className="form">
             <Field label="Discord webhook URL" hint="Server settings, Integrations, Webhooks, New webhook, Copy URL.">

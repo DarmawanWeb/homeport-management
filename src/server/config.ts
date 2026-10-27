@@ -47,6 +47,8 @@ export const paths = {
   deployLogs: path.join(DATA_DIR, 'deploy-logs'),
   caddyValidate: path.join(DATA_DIR, 'Caddyfile.validate'),
   monitoring: path.join(DATA_DIR, 'monitoring'),
+  analytics: path.join(DATA_DIR, 'analytics'),
+  uptime: path.join(DATA_DIR, 'uptime'),
   web: path.join(ROOT, 'dist', 'web'),
 };
 
@@ -122,5 +124,8 @@ export function defaultSettings(): Settings {
       onDeployFailed: true,
       onAlerts: true,
     },
+    analytics: { enabled: true, retentionDays: 90 },
+    uptime: { enabled: true, mode: 'public', intervalSec: 60 },
+    statusPage: { enabled: false, title: 'Status', hosts: [] },
   };
 }

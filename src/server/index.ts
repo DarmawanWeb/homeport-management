@@ -1,3 +1,4 @@
+import { flushAnalytics, startAnalytics } from './analytics/index.js';
 import { buildApp } from './app.js';
 import { adoptEnvPassword } from './auth/index.js';
 import { loadAuth, prepareSetupCode, saveAuth, wasMigrated } from './auth/store.js';
@@ -6,13 +7,15 @@ import { activity } from './lib/activity.js';
 import { errMsg } from './lib/errors.js';
 import { startAlertLoop } from './monitoring/alerts.js';
 import { startExporter } from './monitoring/exporter.js';
+import { startNetstat } from './monitoring/netstat.js';
 import { registerMonitoringHooks, upgradeLayout, writeConfigs } from './monitoring/service.js';
 import { FLAVOR, FLAVOR_LABEL } from './platform.js';
-import { detectMetricsMode } from './services/caddy.js';
+import { detectMetricsMode, syncOnStart } from './services/caddy.js';
 import { markInterrupted, pollOnce } from './services/deploy.js';
 import { registerDeployNotifications } from './services/notify.js';
 import { startWebhookServer } from './services/webhooks.js';
 import { loadDb, saveDb, settings } from './store.js';
+import { startUptime } from './uptime/index.js';
 
 process.on('unhandledRejection', (e) => activity.error(`unhandledRejection: ${errMsg(e)}`));
 
@@ -32,10 +35,16 @@ async function main(): Promise<void> {
   registerMonitoringHooks();
   startWebhookServer();
   startExporter();
+  startAnalytics();
+  startUptime();
+  startNetstat();
   startAlertLoop();
   setInterval(() => void pollOnce().catch((e) => activity.error(`poll: ${errMsg(e)}`)), 15_000);
 
-  void detectMetricsMode().then((m) => activity.info(`Caddy metrics: ${m}`));
+  void detectMetricsMode()
+    .then((m) => activity.info(`Caddy metrics: ${m}`))
+    .then(() => syncOnStart())
+    .catch((e) => activity.warn(`Caddy: ${errMsg(e)}`));
   if (settings().monitoring.enabled) {
     await writeConfigs().catch((e) => activity.warn(`Monitoring config: ${errMsg(e)}`));
     void upgradeLayout().catch((e) => activity.warn(`Monitoring upgrade: ${errMsg(e)}`));
@@ -52,6 +61,7 @@ async function main(): Promise<void> {
 
   const shutdown = async () => {
     await app.close();
+    flushAnalytics();
     await saveDb();
     process.exit(0);
   };

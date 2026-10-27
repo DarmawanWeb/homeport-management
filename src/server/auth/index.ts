@@ -51,7 +51,7 @@ const TOUCH_EVERY_MS = 5 * 60_000;
 const MAX_SESSIONS = 100;
 
 /** Paths reachable without a session. Everything else under /api needs one once an account exists. */
-const OPEN = new Set(['/api/auth/status', '/api/auth/login', '/api/auth/setup']);
+const OPEN = new Set(['/api/auth/status', '/api/auth/login', '/api/auth/setup', '/api/public/status']);
 
 /** What a viewer may still change: their own sign-in, password and second factor. */
 const VIEWER_WRITES = [/^\/api\/auth\/(logout|password|me)$/, /^\/api\/auth\/totp\//, /^\/api\/auth\/sessions(\/|$)/];

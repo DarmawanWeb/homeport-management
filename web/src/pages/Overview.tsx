@@ -1,12 +1,15 @@
+import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, BellRing } from 'lucide-react';
 import { useState } from 'react';
+import type { AnalyticsDTO, UptimeDTO } from '../../../src/shared/types';
 import { Chart } from '../components/Chart';
 import { DeployLogDialog } from '../components/Logs';
 import { RouteMap } from '../components/RouteMap';
 import { SetupNotices } from '../components/Shell';
 import { DeployBadge, Empty, Meter, PageHead, Panel, Segmented } from '../components/ui';
+import { get } from '../lib/api';
 import { useDialog } from '../lib/dialog';
-import { ago, fmtBytes, fmtPct, fmtRate, fmtUptime, shortSha } from '../lib/format';
+import { ago, countryName, delta, flag, fmtBytes, fmtCount, fmtPct, fmtRate, fmtUptime, shortSha } from '../lib/format';
 import { useMetric, useMonitoring, useSystem } from '../lib/queries';
 
 export const RANGES = [
@@ -46,6 +49,53 @@ export function MetricPanel({
   );
 }
 
+/** Visitors and uptime in one strip, linking to the full pages. */
+function AtAGlance() {
+  const { data: a } = useQuery({
+    queryKey: ['analytics', '24h', 'all'],
+    queryFn: () => get<AnalyticsDTO>('/api/analytics?range=24h&host=all'),
+    refetchInterval: 30_000,
+  });
+  const { data: u } = useQuery({ queryKey: ['uptime'], queryFn: () => get<UptimeDTO>('/api/uptime'), refetchInterval: 60_000 });
+  if (!a || !u) return null;
+  const up = u.hosts.filter((h) => h.state === 'up').length;
+  const day = u.hosts.map((h) => h.uptime24h).filter((v): v is number => v != null);
+  const change = delta(a.totals.visitors, a.previous.visitors);
+  return (
+    <section className="panel kpis glance">
+      <a className="kpi" href="#/analytics">
+        <span className="kpi-label">Visitors, 24 h</span>
+        <span className="kpi-value">{fmtCount(a.totals.visitors)}</span>
+        <span className="kpi-delta flat">
+          {change == null ? 'first day' : `${change >= 0 ? '+' : '−'}${fmtPct(Math.abs(change) * 100)} vs day before`}
+        </span>
+      </a>
+      <a className="kpi" href="#/analytics">
+        <span className="kpi-label">Online now</span>
+        <span className="kpi-value">{a.live.activeNow}</span>
+        <span className="kpi-delta flat">
+          {a.countries[0] ? `most from ${flag(a.countries[0].code)} ${countryName(a.countries[0].code)}` : 'no visits yet'}
+        </span>
+      </a>
+      <a className="kpi" href="#/uptime">
+        <span className="kpi-label">Domains up</span>
+        <span className="kpi-value">
+          {up}
+          <small> of {u.hosts.length}</small>
+        </span>
+        <span className="kpi-delta flat">
+          {day.length ? `${((day.reduce((x, y) => x + y, 0) / day.length) * 100).toFixed(2)}% over 24 h` : 'not checked yet'}
+        </span>
+      </a>
+      <a className="kpi" href="#/analytics">
+        <span className="kpi-label">Bandwidth, 24 h</span>
+        <span className="kpi-value">{fmtBytes(a.totals.bytes)}</span>
+        <span className="kpi-delta flat">{fmtCount(a.totals.requests)} requests</span>
+      </a>
+    </section>
+  );
+}
+
 export function Overview() {
   const { data: s } = useSystem();
   const { data: mon } = useMonitoring();
@@ -73,6 +123,8 @@ export function Overview() {
         >
           <RouteMap />
         </Panel>
+
+        <AtAGlance />
 
         {firing.length > 0 && (
           <Panel

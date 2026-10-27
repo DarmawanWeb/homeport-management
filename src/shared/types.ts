@@ -125,6 +125,9 @@ export interface Settings {
   tunnelMetricsPorts: Record<string, number>;
   monitoring: MonitoringSettings;
   notify: NotifySettings;
+  analytics: AnalyticsSettings;
+  uptime: UptimeSettings;
+  statusPage: StatusPageSettings;
 }
 
 export interface DbShape {
@@ -328,4 +331,144 @@ export interface NetworkDTO {
   /** macOS application firewall state, or null when not applicable. */
   firewall: 'on' | 'off' | null;
   firewallFix: string;
+}
+
+// ---------------------------------------------------------------- analytics, uptime, network
+
+export interface AnalyticsSettings {
+  /** Caddy writes an access log for every public domain and Homeport aggregates it. */
+  enabled: boolean;
+  retentionDays: number;
+}
+
+export interface UptimeSettings {
+  enabled: boolean;
+  /** public: https://<domain>/ through Cloudflare (end to end). local: through Caddy only. */
+  mode: 'public' | 'local';
+  intervalSec: number;
+}
+
+export interface StatusPageSettings {
+  enabled: boolean;
+  title: string;
+  /** Domains shown; empty means every checked domain. */
+  hosts: string[];
+}
+
+export type AnalyticsRange = '1h' | '24h' | '7d' | '30d';
+export interface CountItem {
+  name: string;
+  count: number;
+}
+export interface AnalyticsTotals {
+  visitors: number;
+  pageviews: number;
+  requests: number;
+  bytes: number;
+  errors: number;
+  errorRate: number;
+  avgDuration: number;
+  p95: number;
+}
+export interface AnalyticsDTO {
+  range: AnalyticsRange;
+  host: string;
+  hosts: string[];
+  enabled: boolean;
+  /** Caddy's access log exists. */
+  receiving: boolean;
+  /** City-level headers from Cloudflare have been seen. */
+  locationHeaders: boolean;
+  totals: AnalyticsTotals;
+  previous: AnalyticsTotals;
+  series: { t: number; visitors: number; pageviews: number; requests: number; errors: number }[];
+  countries: { code: string; visitors: number; pageviews: number }[];
+  cities: { name: string; country: string; lat: number | null; lon: number | null; visitors: number }[];
+  pages: CountItem[];
+  referrers: CountItem[];
+  browsers: CountItem[];
+  os: CountItem[];
+  devices: CountItem[];
+  status: { '2xx': number; '3xx': number; '4xx': number; '5xx': number };
+  bots: number;
+  live: {
+    activeNow: number;
+    recent: {
+      ts: number;
+      host: string;
+      path: string;
+      country: string;
+      city: string;
+      device: string;
+      browser: string;
+      os: string;
+      referrer: string;
+    }[];
+  };
+}
+
+export interface UptimeCheck {
+  ts: number;
+  ok: boolean;
+  status: number | null;
+  ms: number | null;
+  error?: string;
+}
+export interface UptimeIncident {
+  host: string;
+  start: number;
+  end: number | null;
+  cause: string;
+}
+export interface UptimeHost {
+  host: string;
+  state: 'up' | 'down' | 'unknown';
+  last: UptimeCheck | null;
+  uptime24h: number | null;
+  uptime7d: number | null;
+  uptime30d: number | null;
+  avgMs24h: number | null;
+  /** 90 days, oldest first; null where there is no data. */
+  days: { day: string; uptime: number | null }[];
+  /** Last 60 checks, oldest first, for a latency sparkline. */
+  recent: UptimeCheck[];
+}
+export interface UptimeDTO {
+  enabled: boolean;
+  mode: 'public' | 'local';
+  hosts: UptimeHost[];
+  incidents: UptimeIncident[];
+  statusPage: StatusPageSettings;
+}
+export interface PublicStatusDTO {
+  title: string;
+  state: 'operational' | 'degraded' | 'down' | 'unknown';
+  hosts: Pick<UptimeHost, 'host' | 'state' | 'uptime30d' | 'days'>[];
+  incidents: UptimeIncident[];
+  updatedAt: number;
+}
+
+export interface NetIface {
+  name: string;
+  rxRate: number;
+  txRate: number;
+  rxTotal: number;
+  txTotal: number;
+}
+export interface NetworkStatsDTO {
+  interfaces: NetIface[];
+  /** Bytes per second, sampled every 15 s for the last hour. */
+  throughput: { t: number; rx: number; tx: number }[];
+  internet: {
+    up: boolean | null;
+    latencyMs: number | null;
+    lossPct: number;
+    dnsMs: number | null;
+    series: { t: number; ms: number | null }[];
+    publicIp: string | null;
+    country: string | null;
+    colo: string | null;
+    checkedAt: number | null;
+  };
+  tunnels: { name: string; connections: number; edges: string[] }[];
 }

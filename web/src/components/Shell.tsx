@@ -1,14 +1,18 @@
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Boxes,
   Cable,
+  ChartColumn,
   Compass,
   Eye,
   FileCode2,
   Globe,
+  HeartPulse,
   LogOut,
   Menu,
   Moon,
+  Network,
   ScrollText,
   Search,
   Server,
@@ -18,7 +22,8 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import { post } from '../lib/api';
+import type { UptimeDTO } from '../../../src/shared/types';
+import { get, post } from '../lib/api';
 import { useAppState, useApps, useAuth, useMonitoring, useStatus, useSystem, useTunnels } from '../lib/queries';
 import { href, type Route } from '../lib/router';
 import { useToast } from '../lib/toast';
@@ -60,6 +65,8 @@ function useNav(): { group: string; items: NavItem[] }[] {
   const { data: mon } = useMonitoring();
   const { data: auth } = useAuth();
   const firing = mon?.alerts.filter((a) => a.state === 'firing').length ?? 0;
+  const { data: up } = useQuery({ queryKey: ['uptime'], queryFn: () => get<UptimeDTO>('/api/uptime'), refetchInterval: 60_000 });
+  const down = up?.hosts.filter((h) => h.state === 'down').length ?? 0;
   // Public with no second factor: worth a dot in the sidebar.
   const access = auth && auth.publicUrls.length > 0 && !auth.totpEnabled;
   return [
@@ -80,6 +87,9 @@ function useNav(): { group: string; items: NavItem[] }[] {
     {
       group: 'Observe',
       items: [
+        { route: { page: 'analytics' }, label: 'Analytics', icon: <ChartColumn /> },
+        { route: { page: 'uptime' }, label: 'Uptime', icon: <HeartPulse />, alert: down },
+        { route: { page: 'network' }, label: 'Network', icon: <Network /> },
         { route: { page: 'monitoring' }, label: 'Monitoring', icon: <Activity />, alert: firing },
         { route: { page: 'activity' }, label: 'Activity log', icon: <ScrollText /> },
       ],

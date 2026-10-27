@@ -15,16 +15,20 @@ import { DialogProvider } from './lib/dialog';
 import { useRoute } from './lib/router';
 import { ToastProvider } from './lib/toast';
 import { Access } from './pages/Access';
+import { Analytics } from './pages/Analytics';
 import { AppDetail } from './pages/AppDetail';
 import { Apps } from './pages/Apps';
 import { AuthGate } from './pages/Auth';
 import { Domains } from './pages/Domains';
 import { Activity, Caddyfile } from './pages/Misc';
 import { Monitoring } from './pages/Monitoring';
+import { Network } from './pages/Network';
 import { Overview } from './pages/Overview';
 import { Services } from './pages/Services';
 import { Settings } from './pages/Settings';
+import { StatusPage } from './pages/StatusPage';
 import { Tunnels } from './pages/Tunnels';
+import { Uptime } from './pages/Uptime';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 2000, refetchOnWindowFocus: true, retry: 1 } },
@@ -41,6 +45,9 @@ const TITLES: Record<string, string> = {
   activity: 'Activity log',
   settings: 'Settings',
   access: 'Access',
+  analytics: 'Analytics',
+  uptime: 'Uptime',
+  network: 'Network',
 };
 
 function App() {
@@ -77,6 +84,9 @@ function App() {
       {route.page === 'activity' && <Activity />}
       {route.page === 'settings' && <Settings />}
       {route.page === 'access' && <Access />}
+      {route.page === 'analytics' && <Analytics />}
+      {route.page === 'uptime' && <Uptime />}
+      {route.page === 'network' && <Network />}
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </Shell>
   );
@@ -87,9 +97,13 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <DialogProvider>
-          <AuthGate>
-            <App />
-          </AuthGate>
+          {location.pathname.startsWith('/status') ? (
+            <StatusPage />
+          ) : (
+            <AuthGate>
+              <App />
+            </AuthGate>
+          )}
         </DialogProvider>
       </ToastProvider>
     </QueryClientProvider>
