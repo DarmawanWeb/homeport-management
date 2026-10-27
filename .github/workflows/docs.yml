@@ -18,7 +18,21 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.pages.outputs.enabled }}
     steps:
+      # Publishing needs GitHub Pages switched on (Settings → Pages → Source: GitHub Actions).
+      # Until then, build the site to catch errors but skip publishing instead of failing.
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=GitHub Pages is off::The docs were built but not published. Turn on Settings → Pages → Source: GitHub Actions, then re-run this workflow."
+          fi
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # lastUpdated timestamps
@@ -28,13 +42,16 @@ jobs:
           cache: npm
       - run: npm ci
       - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.enabled == 'true'
       - run: npm run docs:build
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
         with:
           path: docs/.vitepress/dist
 
   deploy:
     needs: build
+    if: needs.build.outputs.pages == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
