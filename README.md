@@ -141,6 +141,8 @@ Open `http://<nas-ip>:7070` and enter the setup code from the container log. Wit
 
 Moving from a hand-made Caddy or tunnel setup? `bash reset-mac.sh --dry-run` lists what it would remove, and `bash reset-mac.sh` removes it step by step after backing up the config.
 
+Starting over? `bash reset-mac.sh --full` also removes Homeport itself, every app it deployed (pm2 processes, logs, checkouts and build caches), its data and the package manager caches, and `bash reset-mac.sh --reinstall` does that and then runs `setup-mac.sh` again.
+
 The [getting started guide](https://darmawanweb.github.io/homeport-management/guide/getting-started) covers first-run setup, remote access over SSH, and keeping the Mac awake.
 
 ## Development
