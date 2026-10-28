@@ -12,7 +12,7 @@ import { portOpen } from '../lib/net.js';
 import { expectRestart } from '../lib/restarts.js';
 import { envMap, port, RE_APPNAME, RE_BRANCH, RE_REPO, RE_SHA } from '../lib/validators.js';
 import { db, saveDb, settings } from '../store.js';
-import { appDir, detectProject, ecosystemFile, generateEcosystem, git, isDeploying, queueDeploy } from './deploy.js';
+import { appDir, deployLogFile, detectProject, ecosystemFile, generateEcosystem, git, isDeploying, queueDeploy } from './deploy.js';
 import * as pm2 from './pm2.js';
 import { createSite, type MutationResult, maybeApply, sitesForApp } from './sites.js';
 
@@ -213,25 +213,36 @@ export async function updateApp(
   return out;
 }
 
+/**
+ * Delete an app and everything Homeport keeps for it: the pm2 process and its logs, the pm2
+ * ecosystem file, the deploy history and deploy logs, and optionally the checkout (with its
+ * node_modules and build caches) and its domains.
+ */
 export async function deleteApp(id: string, opts: { files: boolean; sites: boolean }): Promise<{ steps: string[] }> {
   const a = findApp(id);
   if (isDeploying(a.id)) throw badRequest('A deploy is running. Wait for it to finish.');
   const steps: string[] = [];
-  if (await pm2.remove(a.name)) steps.push('pm2 process removed');
+  if (await pm2.remove(a.name, { logs: true })) steps.push('pm2 process and its logs removed');
   await fsp.unlink(ecosystemFile(a)).catch(() => {});
   if (opts.files) {
     const dir = appDir(a);
     // Only ever delete inside the apps folder.
     if (dir.startsWith(path.resolve(settings().appsDir) + path.sep)) {
-      await fsp.rm(dir, { recursive: true, force: true });
-      steps.push(`Deleted ${dir}`);
-    }
+      if (fs.existsSync(dir)) {
+        await fsp.rm(dir, { recursive: true, force: true });
+        steps.push(`Deleted ${dir}`);
+      }
+    } else steps.push(`⚠ ${dir} is outside the apps folder, so it was kept`);
   }
   if (opts.sites) {
     const linked = new Set(sitesForApp(a.name, a.port).map((s) => s.id));
     db.sites = db.sites.filter((s) => !linked.has(s.id));
     if (linked.size) steps.push(`Removed ${linked.size} domain(s)`);
   }
+  const history = db.deploys.filter((d) => d.appId === a.id);
+  for (const d of history) await fsp.unlink(deployLogFile(d.id)).catch(() => {});
+  if (history.length) steps.push(`Cleared ${history.length} deploy(s) from the history`);
+  db.deploys = db.deploys.filter((d) => d.appId !== a.id);
   db.apps = db.apps.filter((x) => x.id !== a.id);
   await saveDb();
   try {

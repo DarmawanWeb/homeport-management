@@ -4,22 +4,30 @@
 #   bash reset-mac.sh             # ask before every step (recommended)
 #   bash reset-mac.sh --dry-run   # only list what was found; change nothing
 #   bash reset-mac.sh --yes       # do everything without asking (except cert.pem)
+#   bash reset-mac.sh --full      # also remove Homeport itself: its apps (pm2 processes, logs,
+#                                 # checkouts with node_modules and build caches), its data
+#                                 # (apps, domains, users, history, metrics), its build, and the
+#                                 # npm, pnpm and corepack download caches
+#   bash reset-mac.sh --reinstall # --full, then bash setup-mac.sh for a fresh install
 #
 # Optional: CF_API_TOKEN=xxx bash reset-mac.sh also deletes CNAME records of deleted tunnels.
 #   (Cloudflare token with Zone:DNS:Edit and Zone:Zone:Read)
 #
-# Never touched: the Homebrew packages themselves, your apps' pm2 processes,
-# ~/apps, and the cloudflared login (cert.pem) unless you choose to remove it.
-# Works with the bash 3.2 that ships with macOS.
+# Never touched: the Homebrew packages themselves, pm2 itself, and the cloudflared login
+# (cert.pem) unless you choose to remove it. Without --full, also your apps and ~/apps.
+# With --full, files in the apps folder that are not Homeport apps are only removed if you say so,
+# never with --yes. Works with the bash 3.2 that ships with macOS.
 
 set -uo pipefail
 
-DRY=0; YES=0
+DRY=0; YES=0; FULL=0; REINSTALL=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
     --yes|-y) YES=1 ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    --full|--purge) FULL=1 ;;
+    --reinstall) FULL=1; REINSTALL=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "Unknown option: $a"; exit 1 ;;
   esac
 done
@@ -47,11 +55,17 @@ CF_DIR="$HOME/.cloudflared"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$HOME/homeport-reset-backup-$STAMP.tgz"
 DONE=()
+HP_DIR=$(cd "$(dirname "$0")" && pwd)
+HP_DATA="${TM_DATA_DIR:-$HP_DIR/data}"
+
+STEP=0; TOTAL=6; (( FULL )) && TOTAL=8
+section() { STEP=$((STEP + 1)); b "$STEP/$TOTAL  $*"; }
 
 (( DRY )) && printf "\033[33mDRY RUN: nothing will be changed.\033[0m\n"
+(( FULL && ! DRY )) && printf "\033[33mFULL RESET: Homeport, its apps and its data will be removed.\033[0m\n"
 
 # ======================================================================== 1. inventaris
-b "1/6  Looking for an existing setup"
+section "Looking for an existing setup"
 
 BREW_SVCS=""
 if have brew; then
@@ -113,13 +127,99 @@ for f in "$CF_DIR"/config.yml "$CF_DIR"/config.yaml "$CF_DIR"/*.json \
 done
 (( ${#FILES[@]} )) && for f in "${FILES[@]}"; do y "file/folder: $f"; done || g "no old config files"
 
-if [[ -z "$BREW_SVCS$PM2_LIST$PROCS" ]] && (( ${#PLISTS[@]} == 0 && ${#TUNNEL_IDS[@]} == 0 && ${#FILES[@]} == 0 )); then
-  b "Nothing to remove. This Mac is clean ✓"; exit 0
+
+# --full: Homeport itself, the apps it deployed, and what they leave behind.
+HP_APPS=(); APPS_DIR=""; HP_PROC=0; HP_CACHE=()
+if (( FULL )); then
+  # The apps folder and app names come from Homeport's own database.
+  if [[ -f "$HP_DATA/db.json" ]] && have node; then
+    APPS_DIR=$(node -e '
+      const db=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      console.log((db.settings&&db.settings.appsDir)||"")' "$HP_DATA/db.json" 2>/dev/null || true)
+    while IFS= read -r n; do
+      [[ -n "$n" ]] && HP_APPS+=("$n")
+    done < <(node -e '
+      const db=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+      for (const a of db.apps||[]) if (/^[a-z0-9][a-z0-9._-]{0,39}$/.test(a.name)) console.log(a.name)' "$HP_DATA/db.json" 2>/dev/null)
+  fi
+  [[ -z "$APPS_DIR" ]] && APPS_DIR="${HOMEPORT_APPS_DIR:-$HOME/apps}"
+  # Never treat /, the home folder or the Homeport folder as the apps folder.
+  case "$APPS_DIR" in /|"$HOME"|"$HOME/"|"$HP_DIR"|"") APPS_DIR="" ;; esac
+
+  have pm2 && pm2 describe homeport >/dev/null 2>&1 && HP_PROC=1
+  (( HP_PROC )) && y "Homeport is running under pm2" || g "Homeport is not running under pm2"
+  if (( ${#HP_APPS[@]} )); then
+    y "Homeport apps: ${HP_APPS[*]}"
+  else
+    g "no apps in Homeport's database"
+  fi
+  [[ -n "$APPS_DIR" && -d "$APPS_DIR" ]] && y "apps folder: $APPS_DIR ($(ls -A "$APPS_DIR" 2>/dev/null | wc -l | tr -d ' ') entries)"
+  [[ -d "$HP_DATA" ]] && y "Homeport data: $HP_DATA ($(du -sh "$HP_DATA" 2>/dev/null | cut -f1))"
+  for f in "$HP_DIR/dist" "$HP_DIR/node_modules" "$HP_DIR/.tmp" "$HP_DIR/docs/.vitepress/cache" "$HP_DIR/docs/.vitepress/dist"; do
+    [[ -e "$f" ]] && HP_CACHE+=("$f")
+  done
+  (( ${#HP_CACHE[@]} )) && y "Homeport build output: ${HP_CACHE[*]}"
+fi
+
+if [[ -z "$BREW_SVCS$PM2_LIST$PROCS" ]] && (( ${#PLISTS[@]} == 0 && ${#TUNNEL_IDS[@]} == 0 && ${#FILES[@]} == 0 )) \
+  && (( ! FULL || (HP_PROC == 0 && ${#HP_APPS[@]} == 0 && ${#HP_CACHE[@]} == 0) )) \
+  && [[ ! -d "$HP_DATA" || $FULL == 0 ]] && [[ -z "$APPS_DIR" || ! -d "$APPS_DIR" || $FULL == 0 ]]; then
+  b "Nothing to remove. This Mac is clean ✓"
+  (( REINSTALL )) && exec bash "$HP_DIR/setup-mac.sh"
+  exit 0
 fi
 (( DRY )) && { b "Dry run finished. Run without --dry-run to remove these."; exit 0; }
 
+# ======================================================================== Homeport and its apps (--full)
+pm2_logs_of() { # log files pm2 keeps for a process, rotated copies included
+  pm2 jlist 2>/dev/null | node -e '
+    const name=process.argv[1];let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      let a=[];try{a=JSON.parse(s.slice(s.indexOf("[")))}catch{}
+      const e=(a.find(p=>p.name===name)||{}).pm2_env||{};
+      for (const f of [e.pm_out_log_path,e.pm_err_log_path,e.pm_log_path]) if (f&&f[0]==="/"&&!f.startsWith("/dev/")) console.log(f);
+    })' "$1" 2>/dev/null
+}
+pm2_purge() { # pm2_purge name: delete the process and its logs
+  local n=$1 logs f
+  pm2 describe "$n" >/dev/null 2>&1 || return 1
+  logs=$(pm2_logs_of "$n")
+  pm2 delete "$n" >/dev/null 2>&1
+  for f in $logs; do rm -f "$f" "${f%.log}"__*.log 2>/dev/null; done
+  return 0
+}
+
+if (( FULL )); then
+  section "Homeport and its apps"
+  if have pm2 && (( HP_PROC )) && ask "Stop Homeport and remove it from pm2?"; then
+    pm2_purge homeport && g "pm2 delete homeport (and its logs)"
+    DONE+=("Homeport stopped")
+  fi
+  if (( ${#HP_APPS[@]} )) && ask "Remove the apps ${HP_APPS[*]} (pm2 processes, logs and checkouts)?"; then
+    for n in "${HP_APPS[@]}"; do
+      have pm2 && pm2_purge "$n" && g "pm2 delete $n (and its logs)"
+      if [[ -n "$APPS_DIR" && -e "$APPS_DIR/$n" ]]; then
+        rm -rf "${APPS_DIR:?}/$n" && g "deleted $APPS_DIR/$n"
+      fi
+    done
+    DONE+=("apps: ${HP_APPS[*]}")
+  fi
+  have pm2 && pm2 save --force >/dev/null 2>&1
+  if [[ -n "$APPS_DIR" && -d "$APPS_DIR" ]]; then
+    LEFTOVER=$(ls -A "$APPS_DIR" 2>/dev/null)
+    if [[ -z "$LEFTOVER" ]]; then
+      rmdir "$APPS_DIR" 2>/dev/null && g "removed the empty $APPS_DIR"
+    else
+      y "still in $APPS_DIR: $(echo $LEFTOVER)"
+      # Not Homeport's to delete, so never with --yes.
+      if (( ! YES )) && ask "Delete everything in $APPS_DIR too?"; then
+        rm -rf "${APPS_DIR:?}" && g "deleted $APPS_DIR"; DONE+=("$APPS_DIR")
+      fi
+    fi
+  fi
+fi
+
 # ======================================================================== 2. hentikan service
-b "2/6  Stopping caddy and cloudflared services"
+section "Stopping caddy and cloudflared services"
 if [[ -n "$BREW_SVCS" ]] && ask "Stop the caddy and cloudflared brew services?"; then
   for s in caddy cloudflared; do brew services stop "$s" >/dev/null 2>&1 && g "brew services stop $s"; done
   DONE+=("brew services stopped")
@@ -139,15 +239,18 @@ for p in ${PLISTS[@]+"${PLISTS[@]}"}; do
 done
 
 # ======================================================================== 3. pm2
-b "3/6  pm2 processes"
+section "pm2 processes"
 if [[ -n "$PM2_LIST" ]] && ask "Delete pm2 processes: $(echo $PM2_LIST)?"; then
-  for n in $PM2_LIST; do pm2 delete "$n" >/dev/null 2>&1 && g "pm2 delete $n"; done
+  for n in $PM2_LIST; do
+    if (( FULL )); then pm2_purge "$n" && g "pm2 delete $n (and its logs)"
+    else pm2 delete "$n" >/dev/null 2>&1 && g "pm2 delete $n"; fi
+  done
   pm2 save >/dev/null 2>&1
   DONE+=("old pm2 processes")
 else g "skipped"; fi
 
 # ======================================================================== 4. proses sisa
-b "4/6  Processes still running"
+section "Processes still running"
 PROCS=$(pgrep -lx 'caddy|cloudflared' 2>/dev/null || true)
 if [[ -n "$PROCS" ]]; then
   y "$(echo "$PROCS" | awk '{print $2"["$1"]"}' | tr '\n' ' ')"
@@ -162,7 +265,7 @@ if [[ -n "$PROCS" ]]; then
 else g "none"; fi
 
 # ======================================================================== 5. tunnel di Cloudflare
-b "5/6  Tunnels on your Cloudflare account"
+section "Tunnels on your Cloudflare account"
 DELETED_IDS=()
 if (( ${#TUNNEL_IDS[@]} )); then
   echo "  Deleting a tunnel cannot be undone. Its domains stay down until you add them again in Homeport."
@@ -204,7 +307,7 @@ NODE
 fi
 
 # ======================================================================== 6. file config
-b "6/6  Old config files"
+section "Old config files"
 FILES=()
 for f in "$CF_DIR"/config.yml "$CF_DIR"/config.yaml "$CF_DIR"/*.json \
          /etc/cloudflared /usr/local/etc/cloudflared /opt/homebrew/etc/cloudflared \
@@ -213,6 +316,10 @@ for f in "$CF_DIR"/config.yml "$CF_DIR"/config.yaml "$CF_DIR"/*.json \
          "$HOME/tunnel-manager/data" "$HOME/homeport/data"; do
   [[ -e "$f" ]] && FILES+=("$f")
 done
+if (( FULL )); then # the data step below handles Homeport's own data folder
+  KEEP=(); for f in ${FILES[@]+"${FILES[@]}"}; do [[ "$f" -ef "$HP_DATA" ]] || KEEP+=("$f"); done
+  FILES=(${KEEP[@]+"${KEEP[@]}"})
+fi
 if (( ${#FILES[@]} )); then
   for f in "${FILES[@]}"; do y "$f"; done
   if ask "Back up, then delete the files above?"; then
@@ -234,10 +341,42 @@ if [[ -f "$CF_DIR/cert.pem" ]]; then
   fi
 fi
 
+# ======================================================================== Homeport data and caches (--full)
+if (( FULL )); then
+  section "Homeport data, build and caches"
+  if [[ -d "$HP_DATA" ]]; then
+    echo "  $HP_DATA holds the apps, domains, users and two-factor, deploy history and metrics."
+    if ask "Back up the settings, then delete Homeport's data?"; then
+      # Settings only: metrics, analytics and logs are large and not worth restoring.
+      tar czf "$HOME/homeport-data-backup-$STAMP.tgz" -C "$HP_DATA" \
+        --exclude monitoring --exclude analytics --exclude uptime --exclude deploy-logs . 2>/dev/null \
+        && g "backup: ~/homeport-data-backup-$STAMP.tgz" || y "could not back up $HP_DATA"
+      rm -rf "${HP_DATA:?}" && g "deleted $HP_DATA"
+      DONE+=("Homeport data")
+    fi
+  fi
+  if (( ${#HP_CACHE[@]} )) && ask "Delete Homeport's build output and node_modules (setup-mac.sh rebuilds them)?"; then
+    for f in "${HP_CACHE[@]}"; do rm -rf "$f" && g "deleted $f"; done
+    DONE+=("Homeport build output")
+  fi
+  if ask "Clear the npm, pnpm and corepack download caches (they fill up again on the next install)?"; then
+    have npm && npm cache clean --force >/dev/null 2>&1 && g "npm cache cleared"
+    have pnpm && pnpm store prune >/dev/null 2>&1 && g "pnpm store pruned"
+    for d in "${COREPACK_HOME:-$HOME/.cache/node/corepack}" "$HOME/Library/Caches/node/corepack"; do
+      [[ -d "$d" ]] && rm -rf "$d" && g "deleted $d"
+    done
+    DONE+=("package manager caches")
+  fi
+fi
+
 # ======================================================================== ringkasan
 b "Done"
 if (( ${#DONE[@]} )); then for d in "${DONE[@]}"; do g "$d"; done; else y "nothing changed"; fi
 LEFT=$(pgrep -lx 'caddy|cloudflared' 2>/dev/null || true)
 [[ -n "$LEFT" ]] && r "processes still running: $(echo $LEFT)"
 echo
+if (( REINSTALL )); then
+  b "Installing Homeport again"
+  exec bash "$HP_DIR/setup-mac.sh"
+fi
 echo "  Next: bash setup-mac.sh"

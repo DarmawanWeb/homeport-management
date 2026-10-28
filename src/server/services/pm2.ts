@@ -1,3 +1,5 @@
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import type { Pm2Proc } from '../../shared/types.js';
 import { HttpError } from '../lib/errors.js';
 import { type RunOptions, type RunResult, run, stripAnsi, tail } from '../lib/exec.js';
@@ -36,7 +38,16 @@ interface RawProc {
   name: string;
   pm_id: number;
   monit?: { cpu?: number; memory?: number };
-  pm2_env?: { status?: string; pm_uptime?: number; restart_time?: number; PORT?: string; env?: Record<string, string> };
+  pm2_env?: {
+    status?: string;
+    pm_uptime?: number;
+    restart_time?: number;
+    PORT?: string;
+    env?: Record<string, string>;
+    pm_out_log_path?: string;
+    pm_err_log_path?: string;
+    pm_log_path?: string;
+  };
 }
 
 let cache: { at: number; value: { list: Pm2Proc[]; error: string | null } } | null = null;
@@ -105,11 +116,36 @@ export async function startBinary(name: string, bin: string, args: string[]): Pr
   invalidate();
 }
 
-export async function remove(name: string): Promise<boolean> {
+/** Log files pm2 writes for a process, from `pm2 jlist`. */
+export async function logFiles(name: string): Promise<string[]> {
+  const r = await pm2(['jlist'], { timeout: 20_000, quiet: true });
+  if (!r.ok) return [];
+  try {
+    const env = (JSON.parse(jsonPart(r.stdout)) as RawProc[]).find((p) => p.name === name)?.pm2_env;
+    return [env?.pm_out_log_path, env?.pm_err_log_path, env?.pm_log_path].filter(
+      (f): f is string => typeof f === 'string' && path.isAbsolute(f) && !f.startsWith('/dev/'),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Delete a log file and the copies pm2-logrotate made of it (name-out__2026-10-28_00-00-00.log). */
+async function removeLogFile(file: string): Promise<void> {
+  const dir = path.dirname(file);
+  const stem = path.basename(file).replace(/\.log$/, '');
+  const rotated = (await fsp.readdir(dir).catch(() => [] as string[])).filter((f) => f.startsWith(`${stem}__`));
+  for (const f of [file, ...rotated.map((r) => path.join(dir, r))]) await fsp.rm(f, { force: true }).catch(() => {});
+}
+
+/** Delete a pm2 process. With `logs`, its log files go too, so nothing of it is left behind. */
+export async function remove(name: string, opts: { logs?: boolean } = {}): Promise<boolean> {
   invalidate();
   if (!(await find(name))) return false;
+  const files = opts.logs ? await logFiles(name) : [];
   must(await pm2(['delete', name]), `pm2 delete ${name}`);
   invalidate();
+  for (const f of files) await removeLogFile(f);
   return true;
 }
 

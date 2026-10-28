@@ -44,6 +44,27 @@ bash reset-mac.sh
 
 Old config files are archived to `~/homeport-reset-backup-*.tgz`.
 
+## Start over
+
+To wipe Homeport and install it fresh, with no apps, history or caches left behind:
+
+```bash
+bash reset-mac.sh --full --dry-run   # list what would go
+bash reset-mac.sh --reinstall        # remove everything, then run setup-mac.sh
+```
+
+`--full` stops Homeport and removes, after asking at each step:
+
+- every app in Homeport: its pm2 process and logs, and its checkout in `~/apps` with `node_modules` and build caches
+- Homeport's data folder: apps, domains, users and two-factor, deploy history, metrics. The settings are archived to `~/homeport-data-backup-*.tgz` first
+- Homeport's own `dist` and `node_modules`
+- the npm, pnpm and corepack download caches
+- everything the plain reset removes (Caddy, tunnels, old config)
+
+Files in `~/apps` that Homeport did not deploy are only deleted if you say yes, never with `--yes`. Homebrew packages, pm2 and the cloudflared login stay.
+
+To remove a single app instead, use **Delete app** on the Apps page or the app's page. It removes the pm2 process and its logs and the deploy history, and by default the checkout too.
+
 ## Open the dashboard
 
 A Mac mini used as a server usually has no screen or keyboard, so `setup-mac.sh` opens the dashboard to your local network on the first install and prints where to find it:

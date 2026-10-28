@@ -1,17 +1,17 @@
-import { ChevronLeft, ExternalLink, Globe, Play, Rocket, RotateCw, Square, Trash2 } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Globe, Play, Rocket, RotateCw, Square } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AppView } from '../../../src/shared/types';
 import { DeployStrip } from '../components/DeployStrip';
 import { DeployLogDialog, Pm2Log } from '../components/Logs';
-import { Badge, Button, CopyField, DeployBadge, Empty, Field, Loading, Modal, Notice, PageHead, Panel, Switch } from '../components/ui';
-import { del, get, post } from '../lib/api';
+import { Badge, Button, CopyField, DeployBadge, Empty, Field, Loading, Notice, PageHead, Panel } from '../components/ui';
+import { get, post } from '../lib/api';
 import { useDialog } from '../lib/dialog';
 import { ago, fmtBytes, fmtDuration, fmtPct, fmtUptime, repoShort, shortSha } from '../lib/format';
 import { useAppState, useApps, useCommits, useDeploys, useMonitoring, useRefresh } from '../lib/queries';
-import { type AppTab, href, navigate } from '../lib/router';
+import { type AppTab, navigate } from '../lib/router';
 import { useReport, useToast } from '../lib/toast';
 import { AppSettings } from './AppForm';
-import { appState, useDeployAction } from './Apps';
+import { appState, DeleteAppButton, useDeployAction } from './Apps';
 import { MetricPanel, RangePicker, type RangeValue } from './Overview';
 
 const TABS: [AppTab, string][] = [
@@ -129,6 +129,7 @@ export function AppDetail({ id, tab }: { id: string; tab: AppTab }) {
             <Button variant="primary" icon={<Rocket />} disabled={app.deploying} onClick={() => deploy(app)}>
               Deploy now
             </Button>
+            <DeleteAppButton app={app} iconOnly />
           </>
         }
       />
@@ -196,7 +197,7 @@ export function AppDetail({ id, tab }: { id: string; tab: AppTab }) {
       {tab === 'webhook' && <WebhookTab app={app} />}
       {tab === 'settings' && (
         <Panel title="Settings">
-          <AppSettings app={app} footer={<DeleteButton app={app} />} />
+          <AppSettings app={app} footer={<DeleteAppButton app={app} className="right-push" />} />
         </Panel>
       )}
     </div>
@@ -383,48 +384,5 @@ function WebhookTab({ app }: { app: AppView }) {
         </dl>
       </Panel>
     </div>
-  );
-}
-
-function DeleteButton({ app }: { app: AppView }) {
-  const { open } = useDialog();
-  return (
-    <Button variant="danger" icon={<Trash2 />} className="right-push" onClick={() => open(<DeleteApp app={app} />)}>
-      Delete app
-    </Button>
-  );
-}
-
-function DeleteApp({ app }: { app: AppView }) {
-  const [files, setFiles] = useState(false);
-  const [sites, setSites] = useState(true);
-  const { close } = useDialog();
-  const report = useReport();
-  const refresh = useRefresh();
-  return (
-    <Modal
-      title={`Delete ${app.name}?`}
-      danger
-      submitLabel="Delete app"
-      onSubmit={async () => {
-        const r = await del(`/api/apps/${app.id}?files=${files ? 1 : 0}&site=${sites ? 1 : 0}`);
-        close();
-        report(r, `${app.name} deleted`);
-        await refresh();
-        location.hash = href({ page: 'apps' });
-      }}
-    >
-      <div className="form">
-        <p>The pm2 process is stopped and removed, and pushes are no longer deployed.</p>
-        <Switch checked={files} onChange={setFiles} hint={app.dir}>
-          Also delete the checked-out code
-        </Switch>
-        {app.domains.length > 0 && (
-          <Switch checked={sites} onChange={setSites} hint={app.domains.join(', ')}>
-            Also remove its domains from Caddy and the tunnel
-          </Switch>
-        )}
-      </div>
-    </Modal>
   );
 }
