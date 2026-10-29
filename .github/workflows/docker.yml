@@ -41,7 +41,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=Homeport
             org.opencontainers.image.description=Self-hosted deploy platform: git push deploys, pm2, Caddy, Cloudflare Tunnel, Prometheus
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
