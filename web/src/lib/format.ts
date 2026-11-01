@@ -77,3 +77,13 @@ export const countryName = (code: string): string => {
 };
 
 export const dayLabel = (t: number) => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+// Second-level labels that act as a TLD (shop.co.id is a root domain, not a subdomain of co.id).
+const SLD = new Set(['ac', 'biz', 'co', 'com', 'edu', 'go', 'gov', 'mil', 'my', 'net', 'or', 'org', 'ponpes', 'sch', 'web']);
+
+/** example.com or example.co.id: a root domain, where www.<host> usually serves the same site. */
+export function isRootDomain(host: string): boolean {
+  const labels = host.trim().toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
+  if (labels.length === 2) return true;
+  return labels.length === 3 && SLD.has(labels[1] ?? '') && (labels[2]?.length ?? 0) === 2;
+}

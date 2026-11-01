@@ -19,12 +19,15 @@ interface DnsRecord {
   content: string;
 }
 
-async function cf<T>(method: string, path: string): Promise<CfResponse<T>> {
+export const hasToken = () => !!settings().cfApiToken;
+
+async function cf<T>(method: string, path: string, body?: unknown): Promise<CfResponse<T>> {
   const token = settings().cfApiToken;
   if (!token) throw badRequest('Add a Cloudflare API token in Settings first');
   const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
   });
   const j = (await res.json().catch(() => ({}))) as CfResponse<T>;
@@ -42,12 +45,56 @@ export async function listZones(): Promise<Zone[]> {
   return zones;
 }
 
+/** Pure: the zone a hostname belongs to (the longest match, so a.b.example.com picks b.example.com if both exist). */
+export function pickZone<Z extends { name: string }>(zones: Z[], hostname: string): Z | undefined {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  return zones
+    .filter((z) => host === z.name.toLowerCase() || host.endsWith(`.${z.name.toLowerCase()}`))
+    .sort((a, b) => b.name.length - a.name.length)[0];
+}
+
+async function zoneFor(hostname: string): Promise<Zone> {
+  const zone = pickZone(await listZones(), hostname);
+  if (!zone)
+    throw notFound(
+      `No zone for ${hostname} is visible to the Cloudflare API token. Add the domain to Cloudflare, or give the token access to it.`,
+    );
+  return zone;
+}
+
+/**
+ * Point `hostname` at a tunnel with a proxied CNAME, in whichever zone it belongs to. Works for a
+ * root domain (example.com, flattened by Cloudflare) as well as any subdomain, and for every zone
+ * the token can see, unlike `cloudflared tunnel route dns`, which only knows the zone of cert.pem.
+ */
+export async function upsertTunnelCname(hostname: string, tunnelId: string, overwrite: boolean): Promise<'created' | 'unchanged'> {
+  const zone = await zoneFor(hostname);
+  const target = `${tunnelId}.cfargotunnel.com`;
+  const recs = (await cf<DnsRecord[]>('GET', `/zones/${zone.id}/dns_records?name=${encodeURIComponent(hostname)}`)).result;
+  const clashing = recs.filter((r) => ['A', 'AAAA', 'CNAME'].includes(r.type));
+  if (clashing.length === 1 && clashing[0]?.type === 'CNAME' && clashing[0].content === target) return 'unchanged';
+  if (clashing.length && !overwrite) {
+    const r = clashing[0]!;
+    throw badRequest(
+      `${hostname} already has a DNS record (${r.type} → ${r.content}). Turn on "Replace an existing DNS record" to point it at the tunnel.`,
+    );
+  }
+  for (const r of clashing) await cf('DELETE', `/zones/${zone.id}/dns_records/${r.id}`);
+  await cf('POST', `/zones/${zone.id}/dns_records`, {
+    type: 'CNAME',
+    name: hostname,
+    content: target,
+    proxied: true,
+    ttl: 1,
+    comment: 'Homeport',
+  });
+  activity.info(`DNS ${hostname}: CNAME to tunnel ${tunnelId} in zone ${zone.name}${clashing.length ? ' (replaced the old record)' : ''}`);
+  return 'created';
+}
+
 /** Delete CNAME records for `hostname` that point at a Cloudflare Tunnel. Returns how many were removed. */
 export async function deleteTunnelCname(hostname: string): Promise<number> {
-  const zone = (await listZones())
-    .filter((z) => hostname === z.name || hostname.endsWith(`.${z.name}`))
-    .sort((a, b) => b.name.length - a.name.length)[0];
-  if (!zone) throw notFound(`No zone for ${hostname} is visible to this token`);
+  const zone = await zoneFor(hostname);
   const recs = await cf<DnsRecord[]>('GET', `/zones/${zone.id}/dns_records?name=${encodeURIComponent(hostname)}`);
   const targets = recs.result.filter((r) => r.type === 'CNAME' && r.content.endsWith('.cfargotunnel.com'));
   for (const r of targets) await cf('DELETE', `/zones/${zone.id}/dns_records/${r.id}`);
