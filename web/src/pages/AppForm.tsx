@@ -4,6 +4,7 @@ import { DeployLogDialog } from '../components/Logs';
 import { Field, Modal, Switch } from '../components/ui';
 import { post, put } from '../lib/api';
 import { useDialog } from '../lib/dialog';
+import { isRootDomain } from '../lib/format';
 import { useAppState, useApps, useRefresh, useTunnels } from '../lib/queries';
 import { navigate } from '../lib/router';
 import { useReport, useToast } from '../lib/toast';
@@ -15,6 +16,9 @@ interface FormState {
   port: number;
   hostname: string;
   tunnel: string;
+  routeDns: boolean;
+  overwriteDns: boolean;
+  alsoWww: boolean;
   autoDeploy: AutoDeploy;
   pollInterval: number;
   autoRollback: boolean;
@@ -45,6 +49,9 @@ function useAppFormState(app?: AppView) {
     port: app?.port ?? apps?.nextPort ?? 3001,
     hostname: '',
     tunnel: state?.settings.defaultTunnel ?? '',
+    routeDns: true,
+    overwriteDns: false,
+    alsoWww: false,
     autoDeploy: app?.autoDeploy ?? 'webhook',
     pollInterval: app?.pollInterval ?? 60,
     autoRollback: app?.autoRollback ?? true,
@@ -149,7 +156,9 @@ function Fields({
           <Field
             label="Domain"
             hint={
-              appDomain ? `Defaults to <name>.${appDomain}. Clear it for no domain.` : 'Optional. A DNS record is created on Cloudflare.'
+              appDomain
+                ? `Defaults to <name>.${appDomain}. Any hostname works: example.com, edu.example.com. Clear it for no domain.`
+                : 'Optional. A root domain (example.com) or any subdomain (edu.example.com).'
             }
             wide
           >
@@ -172,6 +181,16 @@ function Fields({
             </select>
           </Field>
         </div>
+      )}
+      {creating && f.hostname.trim() && (
+        <DnsSwitches
+          host={f.hostname}
+          tunnel={f.tunnel}
+          routeDns={f.routeDns}
+          overwriteDns={f.overwriteDns}
+          alsoWww={f.alsoWww}
+          set={(k, v) => set(k, v)}
+        />
       )}
       <div className="form-row">
         <Field label="Ship new commits">
@@ -250,6 +269,48 @@ function Fields({
   );
 }
 
+/** DNS options shared by "Add an app" and "Add a domain". */
+export function DnsSwitches({
+  host,
+  tunnel,
+  routeDns,
+  overwriteDns,
+  alsoWww,
+  set,
+}: {
+  host: string;
+  tunnel: string;
+  routeDns: boolean;
+  overwriteDns: boolean;
+  alsoWww: boolean;
+  set: (k: 'routeDns' | 'overwriteDns' | 'alsoWww', v: boolean) => void;
+}) {
+  const h = host.trim().toLowerCase();
+  return (
+    <>
+      {tunnel && (
+        <Switch checked={routeDns} onChange={(v) => set('routeDns', v)} hint="Creates a proxied CNAME to the tunnel on Cloudflare.">
+          Point DNS at the tunnel
+        </Switch>
+      )}
+      {tunnel && routeDns && (
+        <Switch
+          checked={overwriteDns}
+          onChange={(v) => set('overwriteDns', v)}
+          hint="Needed when the hostname already has a record, for example from Vercel or an old tunnel."
+        >
+          Replace an existing DNS record
+        </Switch>
+      )}
+      {isRootDomain(h) && (
+        <Switch checked={alsoWww} onChange={(v) => set('alsoWww', v)} hint={`www.${h} serves the same app.`}>
+          Also add www.{h}
+        </Switch>
+      )}
+    </>
+  );
+}
+
 /** Modal for creating an app; opens the live deploy log afterwards. */
 export function AppForm() {
   const { f, set } = useAppFormState();
@@ -311,7 +372,7 @@ export function AppSettings({ app, footer }: { app: AppView; footer?: ReactNode 
     e.preventDefault();
     setBusy(true);
     try {
-      const { hostname: _h, tunnel: _t, ...body } = f;
+      const { hostname: _h, tunnel: _t, routeDns: _r, overwriteDns: _o, alsoWww: _w, ...body } = f;
       const r = await put<{ deploy?: Deploy; restarted?: boolean; warning?: string }>(`/api/apps/${app.id}`, { ...body, redeploy });
       if (r.warning) toast(r.warning, 'warn', 9000);
       toast(r.restarted ? 'Saved and restarted with the new settings' : 'Saved', 'ok');

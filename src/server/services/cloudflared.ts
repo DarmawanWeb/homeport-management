@@ -7,7 +7,7 @@ import { activity } from '../lib/activity.js';
 import { badRequest, errMsg, HttpError, notFound } from '../lib/errors.js';
 import { type RunOptions, run, tail } from '../lib/exec.js';
 import { db, saveDb, settings } from '../store.js';
-import { deleteTunnelCname } from './cloudflareApi.js';
+import { deleteTunnelCname, hasToken, upsertTunnelCname } from './cloudflareApi.js';
 import * as pm2 from './pm2.js';
 
 export interface Tunnel {
@@ -200,9 +200,41 @@ export async function cleanup(name: string): Promise<void> {
   if (!r.ok) throw new HttpError(500, `tunnel cleanup failed: ${tail(r)}`);
 }
 
+/**
+ * Pure: read the output of `cloudflared tunnel route dns`. cloudflared only knows the zone it was
+ * signed in to (cert.pem); for a hostname in another zone it appends that zone and reports success,
+ * e.g. "Added CNAME edu.new.com.old.com". Exported for tests.
+ */
+export function readRouteDns(hostname: string, output: string): { added: string | null; wrongZone: boolean; exists: boolean } {
+  const added = /Added CNAME (\S+)/i.exec(output)?.[1]?.replace(/\.$/, '').toLowerCase() ?? null;
+  return {
+    added,
+    wrongZone: !!added && added !== hostname.toLowerCase().replace(/\.$/, ''),
+    exists: /already exists|code: 81053|code: 1003/i.test(output),
+  };
+}
+
+/**
+ * Point `hostname` at a tunnel. With a Cloudflare API token the record is made over the API in
+ * whichever zone the hostname belongs to (root domains included); without one, cloudflared does it,
+ * which only works inside the zone it was signed in to.
+ */
 export async function routeDns(tunnel: string, hostname: string, overwrite: boolean): Promise<void> {
+  const t = await get(tunnel);
+  if (hasToken()) {
+    await upsertTunnelCname(hostname, t.id, overwrite);
+    return;
+  }
   const args = ['tunnel', 'route', 'dns', ...(overwrite ? ['--overwrite-dns'] : []), tunnel, hostname];
   const r = await cloudflared(args, { timeout: 45_000 });
+  const out = readRouteDns(hostname, `${r.stdout}\n${r.stderr}`);
+  if (out.wrongZone)
+    throw new HttpError(
+      400,
+      `cloudflared made ${out.added} instead of ${hostname}: it is signed in to another domain. Delete that record on Cloudflare, then either add a Cloudflare API token in Settings (Homeport then makes records in every zone) or add a proxied CNAME ${hostname} → ${t.id}.cfargotunnel.com by hand.`,
+    );
+  if (!r.ok && out.exists)
+    throw new HttpError(400, `${hostname} already has a DNS record. Turn on "Replace an existing DNS record" to point it at the tunnel.`);
   if (!r.ok) throw new HttpError(500, `route dns failed: ${tail(r)}`);
 }
 
