@@ -65,7 +65,7 @@ Viewers get `403` on every change except their own password, two-factor and sess
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/apps` | Apps with pm2 state, port health, domains and the last 20 deploys |
-| POST | `/api/apps` | Create an app; optional `hostname` and `tunnel` also create the domain; deploys unless `deployNow: false` |
+| POST | `/api/apps` | Create an app; optional `hostname` and `tunnel` also create the domain (`routeDns`, `overwriteDns`, and `alsoWww` for a root domain); deploys unless `deployNow: false` |
 | PUT | `/api/apps/:id` | Update settings; `redeploy: true` to rebuild |
 | DELETE | `/api/apps/:id?files=1&site=1` | Remove the pm2 process, its logs and the deploy history; optionally the checkout and the domains |
 | POST | `/api/apps/:id/deploy` | Queue a deploy; `{ "commit": "<sha>" }` deploys a specific commit |
