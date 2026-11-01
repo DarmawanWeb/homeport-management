@@ -267,9 +267,12 @@ export function Settings() {
           </div>
         </Panel>
 
-        <Panel title="Cloudflare API" description="Optional. Lets Homeport delete DNS records when you delete a domain or tunnel.">
+        <Panel
+          title="Cloudflare API"
+          description="Optional. Homeport then creates DNS records in every zone the token can see, root domains included, and deletes them with their domain or tunnel."
+        >
           <div className="form">
-            <Field label="API token" hint="Permissions: Zone, DNS, Edit and Zone, Zone, Read.">
+            <Field label="API token" hint="Permissions: Zone, DNS, Edit and Zone, Zone, Read, for all zones you use.">
               <input type="password" value={f.cfApiToken} onChange={(e) => set('cfApiToken', e.target.value)} autoComplete="new-password" />
             </Field>
             <div>
