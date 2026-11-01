@@ -58,6 +58,8 @@ const createExtras = z.object({
   tunnel: z.string().trim().default(''),
   routeDns: z.boolean().default(true),
   overwriteDns: z.boolean().default(false),
+  /** For a root domain: also serve www.<hostname>. */
+  alsoWww: z.boolean().default(false),
   deployNow: z.boolean().default(true),
 });
 
@@ -152,10 +154,14 @@ export async function createApp(
   await saveDb();
   activity.info(`App created: ${a.name} (${a.repo})`);
   const out: { app: PublicApp; deploy?: Deploy; site?: MutationResult; warning?: string } = { app: toPublic(a) };
-  if (extras.hostname) {
+  const hosts = extras.hostname
+    ? [extras.hostname, ...(extras.alsoWww && !extras.hostname.startsWith('www.') ? [`www.${extras.hostname}`] : [])]
+    : [];
+  const warnings: string[] = [];
+  for (const hostname of hosts) {
     try {
-      out.site = await createSite({
-        hostname: extras.hostname,
+      const site = await createSite({
+        hostname,
         upstreamPort: a.port,
         tunnel: extras.tunnel || settings().defaultTunnel,
         pm2Name: a.name,
@@ -163,10 +169,14 @@ export async function createApp(
         overwriteDns: extras.overwriteDns,
         notes: a.name,
       });
+      out.site ??= site;
+      // The first domain's own warning reaches the dashboard with out.site; report the others here.
+      if (site.warning && out.site !== site) warnings.push(`${hostname}: ${site.warning}`);
     } catch (e) {
-      out.warning = `The domain could not be created: ${errMsg(e)}`;
+      warnings.push(`${hostname} could not be added: ${errMsg(e)}`);
     }
   }
+  if (warnings.length) out.warning = warnings.join('\n');
   if (extras.deployNow) out.deploy = queueDeploy(a, 'manual');
   return out;
 }
