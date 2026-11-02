@@ -56,14 +56,14 @@ If the apps live in **git submodules**, every deploy runs `git submodule update 
 
 Each app has its own webhook: add both to the repository on GitHub. A push then deploys both; Homeport lets them take turns at the pm2 reload step, which pm2 only allows one at a time.
 
-**Example: DCTEdu** (a Turborepo with the store and the simulator as submodules)
+**Example:** a Turborepo with a Next.js site and a Next.js docs app, each in its own submodule.
 
-| | Store | Simulator |
+| | Site | Docs |
 |---|---|---|
-| Repository | `https://github.com/DarmawanWeb/DCTEdu` | same |
-| Package | `@dctedu/store` | `@dctedu/simulator` |
-| Domain | `store.example.com` | `simulator.example.com` |
-| Environment | `NEXT_PUBLIC_STORE_URL`, `NEXT_PUBLIC_SIMULATOR_URL`, `NEXT_PUBLIC_WHATSAPP_NUMBER`… | same |
+| Repository | `https://github.com/acme/platform` | same |
+| Package | `@acme/web` | `@acme/docs` |
+| Domain | `acme.com` (with www) | `docs.acme.com` |
+| Environment | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_DOCS_URL` | same |
 
 `NEXT_PUBLIC_*` values are baked in at build time; Turborepo passes them through because the repository's `turbo.json` lists them. Change one, then redeploy.
 
