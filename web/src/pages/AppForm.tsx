@@ -325,7 +325,7 @@ export function AppForm() {
 
   useEffect(() => {
     if (!nameTouched && f.repo) {
-      // One repo can hold several apps: name each after its package, e.g. dctedu-store.
+      // One repo can hold several apps: name each after its package, e.g. acme-web.
       const pkg = f.workspace.split('/').filter(Boolean).pop() ?? '';
       set('name', pkg ? `${nameFromRepo(f.repo)}-${pkg.toLowerCase().replace(/[^a-z0-9._-]/g, '-')}`.slice(0, 40) : nameFromRepo(f.repo));
     }

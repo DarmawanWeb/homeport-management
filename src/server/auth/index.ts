@@ -41,8 +41,9 @@ import {
 } from './store.js';
 
 const SETUP_CODE_WHERE = {
-  docker: 'Container Manager → Container → homeport → Log (or docker logs homeport). It is also in the file setup-code in the data folder.',
-  native: `Run pm2 logs homeport on the machine, or cat ${SETUP_CODE_FILE}`,
+  // Completes the sentence "The code is printed when Homeport starts. Find it in …".
+  docker: 'Container Manager → Container → homeport → Log (or docker logs homeport), or in the setup-code file in the data folder.',
+  native: `the output of pm2 logs homeport on the machine, or in ${SETUP_CODE_FILE}.`,
 };
 
 export const SESSION_COOKIE = 'hp_session';

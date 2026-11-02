@@ -1,7 +1,7 @@
 {
   "name": "homeport",
   "version": "3.7.0",
-  "description": "Self-hosted deploy platform for a Mac mini: git push deploys with rollback, pm2, Caddy, Cloudflare Tunnel, Prometheus and Grafana.",
+  "description": "Deploy Node apps to the computer under your desk: git push deploys with rollback, Cloudflare Tunnel, Caddy, pm2, Prometheus and Grafana.",
   "main": "dist/server/index.js",
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
