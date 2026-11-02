@@ -64,8 +64,8 @@ Host networking matters: it lets Caddy, the webhook listener and each app use th
 4. Install:
 
    ```bash
-   git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
-   cd ~/homeport
+   git clone https://github.com/DarmawanWeb/homeport-management.git
+   cd homeport-management
    bash setup-linux.sh
    ```
 

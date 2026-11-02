@@ -2,7 +2,8 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 'Homeport',
-  description: 'A self-hosted deploy platform for a Mac mini: git push, pm2, Caddy, Cloudflare Tunnel, Prometheus and Grafana.',
+  description:
+    'Deploy Node apps to the computer under your desk: git push deploys with rollback, Cloudflare Tunnel, Caddy, pm2, Prometheus and Grafana.',
   // Served from https://<user>.github.io/homeport-management/ by the docs workflow.
   base: process.env.DOCS_BASE ?? '/homeport-management/',
   cleanUrls: true,
