@@ -55,7 +55,6 @@ function AuthLayout({ children }: { children: ReactNode }) {
           <span>Homeport</span>
         </div>
         <div className="auth-pitch">
-          <p className="auth-kicker">Self-hosted deploys</p>
           <p className="auth-tag">
             Push to GitHub.
             <br />
@@ -228,7 +227,7 @@ function SetupScreen({ auth, onDone }: { auth: AuthStatusDTO; onDone: () => Prom
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            placeholder="agus"
+            placeholder="admin"
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
