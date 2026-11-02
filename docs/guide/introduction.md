@@ -2,7 +2,7 @@
 
 ## The problem
 
-A Mac mini is a very good small server: quiet, cheap to run, fast enough for a handful of Node apps, and already sitting on a desk. Hosting on it usually turns into a pile of manual steps:
+A Mac mini, a small Linux box or a Synology NAS makes a good server: quiet, cheap to run, fast enough for a handful of Node apps, and already on your desk. Hosting on one usually turns into a pile of manual steps:
 
 - `git pull`, `npm install`, `npm run build`, `pm2 restart` over SSH for every change.
 - A hand-edited `~/.cloudflared/config.yml` that has to be restarted after every new hostname.
@@ -14,7 +14,7 @@ Hosted platforms solve this, but they cost money per app, sleep free-tier servic
 
 ## What Homeport does
 
-Homeport is one Node process that turns the Mac mini into a tiny platform:
+Homeport is one Node process that turns that machine into a small platform:
 
 | Without Homeport | With Homeport |
 |---|---|
@@ -27,7 +27,7 @@ Homeport is one Node process that turns the Mac mini into a tiny platform:
 
 ## Who it is for
 
-One person or a small team running several Node services on one Apple Silicon machine at home or in an office, reachable on their own domain through Cloudflare. It is deliberately not a cluster scheduler, a multi-tenant PaaS, or a container platform; see [the design decisions](/decisions/) for why.
+One person or a small team running several Node services on one machine at home or in an office, reachable on their own domain through Cloudflare. It is deliberately not a cluster scheduler, a multi-tenant PaaS, or a container platform; see [the design decisions](/decisions/) for why.
 
 ## How it fits together
 

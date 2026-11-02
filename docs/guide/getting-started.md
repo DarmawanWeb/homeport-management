@@ -6,7 +6,7 @@ On a Synology NAS, a Linux server or a Raspberry Pi, follow [Synology NAS and Li
 
 ## Requirements
 
-- macOS on Apple Silicon or Intel (Linux works too; the setup script is macOS-only)
+- macOS on Apple Silicon or Intel (for Linux and Synology, see the tip above)
 - [Homebrew](https://brew.sh)
 - Node.js 20 or newer
 - A domain on a Cloudflare account
@@ -14,8 +14,8 @@ On a Synology NAS, a Linux server or a Raspberry Pi, follow [Synology NAS and Li
 ## Install
 
 ```bash
-git clone https://github.com/DarmawanWeb/homeport-management ~/homeport
-cd ~/homeport
+git clone https://github.com/DarmawanWeb/homeport-management.git
+cd homeport-management
 bash setup-mac.sh
 ```
 
@@ -30,7 +30,7 @@ The script is safe to run again; it is also how you update:
 To update later:
 
 ```bash
-cd ~/homeport && git pull && bash setup-mac.sh
+cd ~/homeport-management && git pull && bash setup-mac.sh
 ```
 
 ## Already have Caddy or a tunnel?
@@ -78,7 +78,7 @@ A Mac mini used as a server usually has no screen or keyboard, so `setup-mac.sh`
     JUB6-FQC6-PIOE-LHQI
 ```
 
-Open either address from a laptop or phone on the same Wi-Fi or LAN. The first visit asks for the **setup code** and a new **dashboard password**; after that, every device signs in with the password. Lost the code? Over SSH, run `pm2 logs homeport` or `cat ~/homeport/data/setup-code`.
+Open either address from a laptop or phone on the same Wi-Fi or LAN. The first visit asks for the **setup code** and a new **dashboard password**; after that, every device signs in with the password. Lost the code? Over SSH, run `pm2 logs homeport` or `cat ~/homeport-management/data/setup-code`.
 
 The `.local` name works on Macs, iPhones and most PCs without any setup. If it does not resolve, use the IP address, and consider a DHCP reservation in your router so it never changes.
 

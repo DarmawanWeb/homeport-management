@@ -1029,7 +1029,8 @@ details.more[open] summary {
   padding: 48px 24px;
   color: var(--ink-soft);
 }
-.empty svg {
+/* Only the state's own icon: buttons inside keep their 15 px icons. */
+.empty > svg {
   width: 32px;
   height: 32px;
   color: var(--ink-faint);
@@ -1378,13 +1379,6 @@ input.otp {
   width: 30px;
   height: 30px;
   color: #f0bd2e;
-}
-.auth-kicker {
-  font: 500 var(--t-xs) / 1 var(--font-code);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #f0bd2e;
-  margin-bottom: 14px;
 }
 .auth-tag {
   font: 600 clamp(28px, 3.2vw, 42px) / 1.08 var(--font-display);

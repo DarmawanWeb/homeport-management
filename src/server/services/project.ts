@@ -136,7 +136,7 @@ export function detectProject(dir: string, opts: { workspace?: string; port?: nu
     const names = workspacePackages(dir).map((p) => p.name);
     throw new Error(`No workspace package "${opts.workspace}"${names.length ? `. Packages here: ${names.join(', ')}` : ''}`);
   }
-  // A monorepo root usually cannot run on its own (DCTEdu: `turbo run start` with no start task).
+  // A monorepo root usually cannot run on its own (often `turbo run start` with no start task).
   // Say which package to pick instead of letting pm2 crash-loop.
   if (!ws && root) {
     const rootStart = root.scripts?.start ?? '';

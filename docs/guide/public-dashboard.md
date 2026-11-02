@@ -25,19 +25,19 @@ The dashboard gets a hostname on your Cloudflare zone and comes in through the s
 
 ![Sign-in page on a public hostname](/screenshots/login.png)
 
-## 1. Create your account
+### 1. Create your account
 
 The first time you open `http://127.0.0.1:7070` on the Mac, Homeport asks for a password before showing anything else. From any other computer (a NAS has no screen) the same screen also asks for the one-time **setup code** that Homeport prints to its log and writes to `data/setup-code`. Without it nobody can claim an unprotected dashboard, whether over the LAN or a tunnel.
 
 Passwords need at least 10 characters. A few unrelated words work well.
 
-## 2. Turn on two-factor sign-in
+### 2. Turn on two-factor sign-in
 
 **Access → Two-factor sign-in → Set up authenticator.** Scan the QR code with any TOTP app (1Password, Google Authenticator, Authy, Bitwarden), type the 6-digit code to confirm, and save the eight recovery codes somewhere safe. Each recovery code works once.
 
 The dashboard can run any build command on the Mac, so treat two-factor as required once it is public. The sidebar shows a yellow dot on **Access** while the dashboard is public without it.
 
-## 3. Publish
+### 3. Publish
 
 **Access → Public dashboard**: enter a hostname such as `deploy.example.com`, pick a tunnel, and press **Publish**. Homeport creates the DNS record, adds the hostname to the tunnel and points Caddy at the dashboard. **Unpublish** removes all three; the dashboard stays available on the Mac.
 

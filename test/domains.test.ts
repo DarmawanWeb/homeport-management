@@ -7,35 +7,35 @@ import { isRootDomain } from '../web/src/lib/format.js';
 
 describe('hostnames of any shape', () => {
   it('picks the zone a hostname belongs to, root domains included', () => {
-    const zones = [{ name: 'agus-darmawan.com' }, { name: 'dctedu.id' }, { name: 'shop.co.id' }];
-    expect(pickZone(zones, 'agus-darmawan.com')?.name).toBe('agus-darmawan.com');
-    expect(pickZone(zones, 'edu.agus-darmawan.com')?.name).toBe('agus-darmawan.com');
-    expect(pickZone(zones, 'edu-sim.agus-darmawan.com')?.name).toBe('agus-darmawan.com');
-    expect(pickZone(zones, 'DCTEdu.id.')?.name).toBe('dctedu.id');
+    const zones = [{ name: 'mysite.com' }, { name: 'example.id' }, { name: 'shop.co.id' }];
+    expect(pickZone(zones, 'mysite.com')?.name).toBe('mysite.com');
+    expect(pickZone(zones, 'app.mysite.com')?.name).toBe('mysite.com');
+    expect(pickZone(zones, 'docs.mysite.com')?.name).toBe('mysite.com');
+    expect(pickZone(zones, 'Example.id.')?.name).toBe('example.id');
     expect(pickZone(zones, 'www.shop.co.id')?.name).toBe('shop.co.id');
     // A lookalike is not a subdomain.
-    expect(pickZone(zones, 'notagus-darmawan.com')).toBeUndefined();
+    expect(pickZone(zones, 'notmysite.com')).toBeUndefined();
   });
 
   it('notices when cloudflared put the record in the zone it is signed in to', () => {
-    const ok = readRouteDns('edu.agus-darmawan.com', 'INF Added CNAME edu.agus-darmawan.com which will route to this tunnel tunnelID=abc');
-    expect(ok).toEqual({ added: 'edu.agus-darmawan.com', wrongZone: false, exists: false });
+    const ok = readRouteDns('app.mysite.com', 'INF Added CNAME app.mysite.com which will route to this tunnel tunnelID=abc');
+    expect(ok).toEqual({ added: 'app.mysite.com', wrongZone: false, exists: false });
 
-    const root = readRouteDns('dctedu.id', 'INF Added CNAME dctedu.id which will route to this tunnel tunnelID=abc');
+    const root = readRouteDns('example.id', 'INF Added CNAME example.id which will route to this tunnel tunnelID=abc');
     expect(root.wrongZone).toBe(false);
 
-    const wrong = readRouteDns('dctedu.id', 'INF Added CNAME dctedu.id.agus-darmawan.com which will route to this tunnel tunnelID=abc');
-    expect(wrong).toMatchObject({ added: 'dctedu.id.agus-darmawan.com', wrongZone: true });
+    const wrong = readRouteDns('example.id', 'INF Added CNAME example.id.mysite.com which will route to this tunnel tunnelID=abc');
+    expect(wrong).toMatchObject({ added: 'example.id.mysite.com', wrongZone: true });
 
     const exists = readRouteDns(
-      'edu.agus-darmawan.com',
-      'Failed to add route: code: 1003, reason: Failed to create record edu.agus-darmawan.com with err An A, AAAA, or CNAME record with that host already exists.',
+      'app.mysite.com',
+      'Failed to add route: code: 1003, reason: Failed to create record app.mysite.com with err An A, AAAA, or CNAME record with that host already exists.',
     );
     expect(exists).toMatchObject({ added: null, wrongZone: false, exists: true });
   });
 
   it('routes root domains and single-word subdomains like any other host', () => {
-    const sites = ['dctedu.id', 'www.dctedu.id', 'edu.agus-darmawan.com', 'edu-sim.agus-darmawan.com'].map((hostname, i) => ({
+    const sites = ['example.id', 'www.example.id', 'app.mysite.com', 'docs.mysite.com'].map((hostname, i) => ({
       id: String(i),
       hostname,
       upstreamHost: 'localhost',
@@ -64,11 +64,11 @@ describe('hostnames of any shape', () => {
   });
 
   it('tells root domains from subdomains for the www option', () => {
-    expect(isRootDomain('dctedu.id')).toBe(true);
-    expect(isRootDomain('agus-darmawan.com')).toBe(true);
-    expect(isRootDomain('dctedu.co.id')).toBe(true);
-    expect(isRootDomain('edu.agus-darmawan.com')).toBe(false);
-    expect(isRootDomain('edu-sim.agus-darmawan.com')).toBe(false);
-    expect(isRootDomain('shop.dctedu.co.id')).toBe(false);
+    expect(isRootDomain('example.id')).toBe(true);
+    expect(isRootDomain('mysite.com')).toBe(true);
+    expect(isRootDomain('example.co.id')).toBe(true);
+    expect(isRootDomain('app.mysite.com')).toBe(false);
+    expect(isRootDomain('docs.mysite.com')).toBe(false);
+    expect(isRootDomain('shop.example.co.id')).toBe(false);
   });
 });
