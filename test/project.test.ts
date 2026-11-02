@@ -4,49 +4,49 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { detectProject, findWorkspace, withPackageManager, workspacePackages } from '../src/server/services/project.js';
 
-/** A Turborepo laid out like DCTEdu: two Next.js apps (with hardcoded ports) and shared packages. */
+/** A typical Turborepo: two Next.js apps (with hardcoded ports) and shared packages. */
 function monorepo(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-mono-'));
   const write = (rel: string, data: unknown) => {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), typeof data === 'string' ? data : JSON.stringify(data));
   };
-  write('package.json', { name: 'dctedu', private: true, packageManager: 'pnpm@10.28.0', scripts: { build: 'turbo run build' } });
+  write('package.json', { name: 'acme', private: true, packageManager: 'pnpm@10.28.0', scripts: { build: 'turbo run build' } });
   write('pnpm-lock.yaml', '');
   write('turbo.json', '{}');
   write('pnpm-workspace.yaml', "packages:\n  - apps/*\n  - 'packages/*'\n\nonlyBuiltDependencies:\n  - sharp\n");
   write('apps/store/package.json', {
-    name: '@dctedu/store',
+    name: '@acme/store',
     scripts: { build: 'next build', start: 'next start --port 3000' },
     dependencies: { next: '^16' },
   });
-  write('apps/simulator/package.json', {
-    name: '@dctedu/simulator',
+  write('apps/site/package.json', {
+    name: '@acme/site',
     scripts: { build: 'next build', start: 'next start --port 3001' },
     dependencies: { next: '^16' },
   });
-  write('packages/ui/package.json', { name: '@dctedu/ui' });
-  write('packages/api/package.json', { name: '@dctedu/api', scripts: { build: 'tsc', start: 'node dist/index.js' } });
+  write('packages/ui/package.json', { name: '@acme/ui' });
+  write('packages/api/package.json', { name: '@acme/api', scripts: { build: 'tsc', start: 'node dist/index.js' } });
   return root;
 }
 
 describe('monorepos', () => {
   it('lists workspace packages from pnpm-workspace.yaml', () => {
     const root = monorepo();
-    expect(workspacePackages(root).map((p) => p.name)).toEqual(['@dctedu/api', '@dctedu/simulator', '@dctedu/store', '@dctedu/ui']);
-    expect(findWorkspace(root, 'apps/store')?.name).toBe('@dctedu/store');
-    expect(findWorkspace(root, 'simulator')?.name).toBe('@dctedu/simulator');
-    expect(findWorkspace(root, '@dctedu/nope')).toBeNull();
+    expect(workspacePackages(root).map((p) => p.name)).toEqual(['@acme/api', '@acme/site', '@acme/store', '@acme/ui']);
+    expect(findWorkspace(root, 'apps/store')?.name).toBe('@acme/store');
+    expect(findWorkspace(root, 'site')?.name).toBe('@acme/site');
+    expect(findWorkspace(root, '@acme/nope')).toBeNull();
   });
 
   it('builds one package with Turborepo and starts Next.js on the assigned port', () => {
     const root = monorepo();
-    const d = detectProject(root, { workspace: '@dctedu/store', port: 3010 });
+    const d = detectProject(root, { workspace: '@acme/store', port: 3010 });
     expect(d).toMatchObject({
       pm: 'pnpm',
       pmSpec: 'pnpm@10.28.0',
       install: 'pnpm install --frozen-lockfile',
-      build: 'pnpm exec turbo run build --filter=@dctedu/store',
+      build: 'pnpm exec turbo run build --filter=@acme/store',
       startDir: path.join(root, 'apps/store'),
       turbo: true,
       next: true,
@@ -59,18 +59,18 @@ describe('monorepos', () => {
     const root = monorepo();
     fs.rmSync(path.join(root, 'turbo.json'));
     const d = detectProject(root, { workspace: 'packages/api', port: 3020 });
-    expect(d.build).toBe('pnpm --filter @dctedu/api run build');
+    expect(d.build).toBe('pnpm --filter @acme/api run build');
     expect(d.start).toBe('pnpm run start');
     expect(d.startDir).toBe(path.join(root, 'packages/api'));
   });
 
   it('explains a package name that does not exist', () => {
-    expect(() => detectProject(monorepo(), { workspace: '@dctedu/shop' })).toThrow(/Packages here: @dctedu\/api, @dctedu\/simulator/);
+    expect(() => detectProject(monorepo(), { workspace: '@acme/shop' })).toThrow(/Packages here: @acme\/api, @acme\/site/);
   });
 
   it('asks for a package instead of starting a monorepo root that cannot run', () => {
     const root = monorepo();
-    expect(() => detectProject(root, { port: 3002 })).toThrow(/monorepo.*@dctedu\/api, @dctedu\/simulator, @dctedu\/store/);
+    expect(() => detectProject(root, { port: 3002 })).toThrow(/monorepo.*@acme\/api, @acme\/site, @acme\/store/);
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
     pkg.scripts.start = 'turbo run start';
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(pkg));
