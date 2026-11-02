@@ -33,7 +33,7 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=GitHub Pages is off::The docs were built but not published. Turn on Settings → Pages → Source: GitHub Actions, then re-run this workflow."
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # lastUpdated timestamps
       - uses: actions/setup-node@v4
